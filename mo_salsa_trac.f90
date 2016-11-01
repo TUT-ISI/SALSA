@@ -1,44 +1,4 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!>
-!! \filename 
-!! mo_salsa_trac.f90
-!!
-!! \brief
-!! mo_salsa_trac contains routines to requests tracers for ECHAM/HAM and 
-!! prescribes their physical and chemical properties.
-!! It controls the aerosol physics by providing the necessary switches.
-!!
-!! \author Philip Stier (MPI-Met)
-!!
-!! \responsible_coder
-!! Martin G. Schultz, m.schultz@fz-juelich.de
-!!
-!! \revision_history
-!!   -# P. Stier (MPI-Met) - original code (2001)
-!!   -# D. O'Donnell (MPI-Met) - code generalization and changes for soa (2009-02-xx)
-!!   -# K. Zhang (MPI-Met) - adaption for new species list and tracer defination (2009-08-11) 
-!!   -# M.G. Schultz (FZ Juelich) - cleanup and adaptation to new structure (2009-11-20)
-!!   -# T. Bergman (FMI) - nmod->nclass to facilitate new aerosol models (2013-02-05)
-!! 	 -# A. Laakso (FMI) - Tracers for SALSA
-!! \limitations
-!! None
-!!
-!! \details
-!! None
-!!
-!! \bibliographic_references
-!! None
-!!
-!! \belongs_to
-!!  HAMMOZ
-!!
-!! \copyright
-!! Copyright and licencing conditions are defined in the ECHAM-HAMMOZ
-!! licencing agreement to be found at:
-!! https://redmine.hammoz.ethz.ch/projects/hammoz/wiki/1_Licencing_conditions
-!! The ECHAM-HAMMOZ software is provided "as is" and without warranty of any kind.
-!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !----------------------------------------------------------------------------
 !!$   Copyright 2014 Atmospheric Research Centre of Eastern Finland,
 !!$         Finnish Meteorological Institute, Kuopio, Finland
@@ -61,13 +21,6 @@
 
 MODULE mo_salsa_trac
 
-  ! Parameters:
-  ! -----------
-  ! User defined flags: density   density                    [kg m-3]
-  !                     osm       osmotic coefficient        [???]
-  !                     nion      number of ions the tracer 
-  !                               dissolves into             [1]
-
   USE mo_kind,          ONLY: dp
 
   USE mo_submctl,   ONLY: in1a, fn1a,           &
@@ -88,13 +41,11 @@ MODULE mo_salsa_trac
   !
   !    Tracer indices:
   !
-  !    Legend: iABBCD
+  !    Legend: iABB
   !
   !            A:  m  = particle mass mixing ratio, n number mixing ratio
   !            BB: s4 = sulfate, bc/oc = black/organic carbon, du = dust, ss = seasalt
-  !            C:  n  = nucleation , k = Aitken, a = accumulation, c = coarse mode
-  !            D:  i  = insoluble,  s = soluble
-
+  
   INTEGER :: idt_dms    ! mass mixing ratio dms
   INTEGER :: idt_so2    ! mass mixing ratio so2
   INTEGER :: idt_so4    ! mass mixing ratio so4
