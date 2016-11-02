@@ -59,13 +59,6 @@ CONTAINS
          idub,&
          issb
 
-    USE mo_salsa_trac, ONLY:    &
-         idt_ms4,                   &
-         idt_moc,                   &
-         idt_mbc,                   &
-         idt_mss,                   &
-         idt_mdu
-
     USE mo_kind, ONLY : dp
 
 
