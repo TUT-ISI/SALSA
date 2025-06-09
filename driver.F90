@@ -1,29 +1,21 @@
-
 PROGRAM driver
-  
-  USE mo_species, ONLY: &
-       speclist
 
-  USE mo_ham_species, ONLY: &
-       ham_species
   USE driver_input
-#ifdef HAMMOZ  
-  USE mo_ham_vbs ,     ONLY: vbs_species
-  USE mo_ham_vbsctl
-#endif
   USE mo_ham_salsa_init
   USE mo_ham,          ONLY:nham_subm, naerocomp, &
-       subm_ngasspec, nsol, &
-       HAM_M7, HAM_SALSA,nclass,sizeclass !+alaak
+       subm_ngasspec, &
+       HAM_M7, HAM_SALSA,nclass, & !+alaak
+       nsol
        
   USE mo_ham_init
   USE mo_ham_salsa
   USE mo_ham_salsactl
+  
   USE mo_ham_salsa_sizedist
   USE mo_ham_subm_species
   USE mo_kind
   USE mo_time_control
-  USE mo_physical_constants, ONLY: vtmpc1, grav
+  USE mo_physical_constants, ONLY: vtmpc1, grav, rd, rv
   USE mo_math_constants,     ONLY: pi_6
   USE mo_submodel
   USE mo_filename
@@ -32,21 +24,11 @@ PROGRAM driver
   USE mo_tracdef,             ONLY: trlist,ntrac
 
   !<--eehol: use statements for microphysics interface
-#ifdef HAMMOZ
-  USE mo_geoloc
-  USE mo_radiation_parameters, ONLY: io3,iaero
-  USE mo_decomposition, ONLY: ldc => local_decomposition
-  USE mo_gaussgrid
-  USE mo_echam_convect_tables
-#endif
   USE mo_ham_subm, ONLY: ham_subm_interface
   !-->eehol
 
   !<--eehol: use statements for wet deposition
   USE mo_activ
-#ifdef HAMMOZ
-  USE mo_submodel_streams
-#endif
   USE mo_param_switches, ONLY: ncd_activ, nactivpdf
   USE mo_hammoz_wetdep, ONLY: wetdep_interface
   USE mo_read_netcdf77, ONLY: read_var_nf77_4d
@@ -63,7 +45,10 @@ PROGRAM driver
   !-->alaak
   USE mo_ham_salsa_cloud, ONLY: salsa_abdul_razzak_ghan
   !<-- 
+  USE mo_math_constants, ONLY: pi_6, pi
 
+  USE mo_ham, ONLY: aerocomp
+  USE mo_tracdef, ONLY: trlist, ntrac
   IMPLICIT NONE
 
   
@@ -83,8 +68,8 @@ PROGRAM driver
   !-----------------------------------------------------------------
 
   !-- aerosol tracers ----------------- 
-  INTEGER, PARAMETER :: nmod = 7
-  INTEGER, PARAMETER :: nmaxtrac = 200
+  INTEGER, PARAMETER :: nmod = 7 ! number of modes
+
   REAL(dp), ALLOCATABLE :: pxtm1(:,:,:), pxtte(:,:,:) 
 
   !-- atmospheric conditions --------------
@@ -103,11 +88,8 @@ PROGRAM driver
        paclc(kbdim,klev),  & !cloud cover
        pqm1(kbdim,klev),   & !specific humidity
        pqsm1(kbdim,klev),   & !saturation specific humidity
-       pgrvolm1(kbdim,klev),&  !grid box volume
-       reffi(kbdim,klev,krow),& !
-       reffl(kbdim,klev,krow),& !
+       pgrvolm1(kbdim,klev), & !grid box volume
        zww(kbdim,klev,krow)
-
   !-->eehol
 
   !<--eehol: variables for calculating concentrations and mixing ratios
@@ -135,7 +117,8 @@ PROGRAM driver
        'NS', 'KS', 'AS', &
        'CS', 'KI', 'AI', 'CI' &
   ]
-  
+
+  INTEGER :: i1, i2, i3
 
   !<--eehol: variables for wet deposition
   INTEGER :: ktop = 1                     ! top level index
@@ -178,7 +161,7 @@ PROGRAM driver
   !<--eehol: local variables for indexing and concentration/mixing ratio conversion
   REAL(dp) :: zqs !eehol: for saturation specific humidity calculations
   REAL(wp), PARAMETER :: rd1    = 287.04_wp        !> [J/K/kg] gas constant
-  INTEGER ::  jk, jl, jt, jclass, it                  ! for indexing
+  INTEGER ::  jk, jl, jt, it                  ! for indexing
   INTEGER :: ierr                           ! error integer
 
   !-->eehol
@@ -196,13 +179,77 @@ PROGRAM driver
   REAL(wp), ALLOCATABLE :: zrc(:,:,:,:) ! critical radius of activation per mode [m]
   REAL(wp), ALLOCATABLE :: zsmax(:,:,:)   ! maximum supersaturation
   !<--alaak
+  
+  REAL(dp) :: mu, sigma, mu2, sigma2
+  REAL(dp) :: sulfate_pdf_value, elvoc_pdf_value
+  REAL(dp) :: H2SO4_scaling_factor
+
+  REAL(dp) :: ptime ! Time step length
+
+  INTEGER :: i, j
+
+  !-->hhalonen
+  REAL(dp) :: pelvoc(kproma,klev), psvoc(kproma,klev), &
+       new_pelvoc(kproma,klev)    ! ELVOC ans SVOC concentrations + 
+                                  ! a variable for updating the elvoc concentration
+
+  ! Distance of table knots [K]
+  REAL(dp), PARAMETER :: fdeltat  =   0.001_dp
+  ! Division is not sufficiently precise, have to replace 1.0_dp/fdeltat
+  REAL(dp), PARAMETER :: rfdeltat = 1000.0_dp 
+  
+  ! Temperature evaluation bounds:
+  REAL(dp), PARAMETER :: tlbound =  50.0_dp  ! lower bound [K]
+  REAL(dp), PARAMETER :: tubound = 400.0_dp  ! upper bound [K]
+  
+  ! Derived bounds and deltas, full table:
+  INTEGER,  PARAMETER :: jptlucu1 = NINT(rfdeltat*tlbound) ! lookup table lower bound
+  INTEGER,  PARAMETER :: jptlucu2 = NINT(rfdeltat*tubound) ! lookup table upper bound
+  
+  REAL(dp) :: tlucuaw(jptlucu1-1:jptlucu2+1)    ! table - Es*Rd/Rv, water phase only
+
+  ! Reference: Sonntag D., 1990: Important new values of the physical 
+  ! constants of 1986, vapour pressure formulations based on ITS-90, 
+  ! and psychrometer formulae. Z. Meteor. 70, pp 340-344. 
+  REAL(dp), PARAMETER :: cavl1 = -6096.9385_dp  
+  REAL(dp), PARAMETER :: cavl2 =    21.2409642_dp
+  REAL(dp), PARAMETER :: cavl3 =    -2.711193_dp
+  REAL(dp), PARAMETER :: cavl4 =     1.673952_dp
+  REAL(dp), PARAMETER :: cavl5 =     2.433502_dp
+
+  REAL(dp) :: zlinner, ztt
+  !<--hhalonen
  
 !>>>>
 
   !  External subroutines 
   EXTERNAL :: inictl
+  
+  !  Executable statements
 
-  !  Executable statements 
+  !-->hhalonen
+  ! Initialize variables for the normal distribution
+  mu = 2000.0_dp       ! Mean of the sulfate distribution (seconds)
+  sigma = 200.0_dp     ! Standard deviation of the sulfate distribution (seconds)
+  mu2 = 2000.0_dp      ! Mean of the ELVOC distribution (seconds)
+  sigma2 = 200.0_dp    ! Standard deviation of the ELVOC distribution (seconds)
+  !<--hhalonen
+  ptime = 1.0_dp
+
+  !-->hhalonen:
+  ! ELVOC concentration: 1.6E7 cm^-3
+  ! SVOC concentration:  2E8 cm^-3
+  ! Molar mass:          300 g/mol
+  ! Source: https://acp.copernicus.org/articles/18/12085/2018/acp-18-12085-2018.pdf
+  do i = 1, kbdim
+    do j = 1, klev
+      pelvoc(i, j) = 1.6E7_dp
+      psvoc(i, j) = 2E8_dp
+    end do
+  end do
+  !<--hhalonen
+
+  H2SO4_scaling_factor = 1.0E15_dp
 
   !<--eehol: initialize ncd_activ to be 2
   ncd_activ = 2
@@ -211,29 +258,13 @@ PROGRAM driver
  
   !-- 1. Set control variables
 
-  !-- 1.1 Set general control variables and time stepping
-  !--     Set I/O units and buffer indices
-
-  !CALL inictl
-
-  !-- 1.2 Initialize netCDF IO
-
-  !CALL IO_init
-
-  !<--eehol: this needs to be set for microphysics interface (get_days)
-  !CALL init_times
-  !-->eehol
-
   !<--eehol: initialization for ham_subm_interface
-  !CALL init_decomposition
-  !CALL inigau
-!  CALL init_convect_tables !eehol: this is needed only for saturation specific humidity calculations.. Strongly related to ECHAM!! (sat. spec. hum. should come from host model!)
+  !CALL init_convect_tables !eehol: this is needed only for saturation specific humidity calculations.. Strongly related to ECHAM!! (sat. spec. hum. should come from host model!)
   !-->eehol
   
   ! read submodel name list and register submodels
   CALL setsubmodel
   CALL start_ham
-  ! CALL vbs_species
   
   !<--eehol: define tracer numbers, idt, etc. with ham_define_tracer
   IF (lham) THEN
@@ -254,17 +285,7 @@ PROGRAM driver
   CALL activ_initialize
   !--> HK:  CALL construct_activ_stream
   !-->eehol
-  
-  !<--eehol: more initialization for ham_subm_interface
-  !CALL init_geoloc(io3,iaero)
-  !CALL ham_init_memory
-  !-->eehol
 
-  !<--eehol: initializations for wet deposition
-  !CALL init_submodel_streams ! initialize submodel streams for wet deposition 
-  !IF (lwetdep .AND. ANY(trlist%ti(:)%nwetdep > 0)) CALL init_wetdep_stream ! initialize wet deposition streams
-  !-->eehol
-  
   !--------------------------------------------------------------------------------
   !
   !  Calculate coagulation coefficients for particles:
@@ -274,7 +295,7 @@ PROGRAM driver
   !  time step according to actual particle wet size 
   !
   !  NB: This must be done somewhere in the host model -
-  !  but only for one time i.e. before any aerosol calculations are started
+  !  but only for one time i1.e. before any aerosol calculations are started
   !
 
   ! call set_coagc(klev,pap,pt)
@@ -285,6 +306,10 @@ PROGRAM driver
   !*                                               *
   !*************************************************
 
+  !--->hhalonen: Allocate particle density
+  ALLOCATE(zrhop(kbdim,klev,nclass))
+  !<---hhalonen
+
   !<--eehol: Allocate tracer mixing ratio + tendency
   ALLOCATE(pxtm1(kbdim,klev,ntrac))
   ALLOCATE(pxtte(kbdim,klev,ntrac))
@@ -294,12 +319,33 @@ PROGRAM driver
   pxtm1(:,:,:) = 0.0_dp
   pxtte(:,:,:) = 0.0_dp
   !-->eehol
+
+  !-->hhalonen
+  ALLOCATE(zrwet(kbdim,klev,nsol))    ! dry radius for each classe
+
+  DO it = jptlucu1-1, jptlucu2+1
+	ztt = fdeltat*REAL(it,dp)
+	zlinner  = (cavl1/ztt+cavl2+cavl3*0.01_dp*ztt+cavl4*ztt*ztt*1.e-5_dp+cavl5*LOG(ztt))
+	tlucuaw(it) = EXP(zlinner)*rd/rv
+  END DO
+  !<--hhalonen
   
   !<--eehol: define variables for ham_subm_interface
   zpbl = 1                               !boundary layer top level
   pap = 101325.                          !Ambient pressure (Pa)
   pt = 298._dp                           !Ambient temperature (K)
   pqm1(:,:) = 0.0058535_dp!0.01_dp       !specific humidity
+  !eehol: calculate saturation specific humidity
+  DO jk = 1,klev
+     DO jl = 1,kproma
+        it    = NINT(pt(jl,jk)*1000._dp)
+        it    = MAX(MIN(it,jptlucu2),jptlucu1)
+        zqs = tlucuaw(it)/pap(jl,jk)
+        zqs = MIN(zqs,0.5_dp)
+        zqs = zqs/(1._dp-vtmpc1*zqs)
+        pqsm1(jl,jk) = zqs      !saturation specific humidity
+     END DO
+  END DO
   paclc(:,:) = 0._dp                     !cloud cover as zero
   pgrvolm1(:,:) = 1.7964E12_dp           !grid box volume [m3] used in m7 diagn
   paph(:,:) = 0._dp                      !define half level pressure as zero
@@ -326,7 +372,7 @@ PROGRAM driver
   DO jk = 1,klev
      DO  jl = 1,kproma       
         !--- 2.1) Calculate air density:
-        !         (currently neglects volume occupied by liquid and ice water  = > physc)       
+        !         (currently neglects volume occupied by liquid and ice water  = > physc)
         zrhoa(jl,jk) = pap(jl,jk)/(pt(jl,jk)*rd1*(1._dp+vtmpc1*pqm1(jl,jk)))       
      ENDDO
   ENDDO
@@ -337,14 +383,14 @@ PROGRAM driver
   ALLOCATE(zgas(kbdim,klev,subm_ngasspec))
   !allocate mass mixing ratio
   ALLOCATE(zaerml(kbdim,klev,naerocomp))
+
   !allocate number concentration
   ALLOCATE(zaernl(kbdim,klev,nclass))
 
   WRITE(*,*) 'eehol: subm_ngasspec =', subm_ngasspec
   
   zgas = 0._dp    ! gases
-  zaerml = 0._dp  ! mixing ratios
-  zaernl = 0._dp  ! number concentrations
+
   !-->eehol
 
   !<--eehol: allocate variables for wet deposition
@@ -357,8 +403,6 @@ PROGRAM driver
   ALLOCATE(za(kbdim,klev,nclass)) ! curvature parameter A of the Koehler equation
   ALLOCATE(zb(kbdim,klev,nclass)) ! hygroscopicity parameter B of the Koehler equation
   ALLOCATE(zrdry(kbdim,klev,nclass))    ! dry radius for each classe
-  ALLOCATE(zrhop(kbdim,klev,nclass))    ! dry radius for each classe
-  ALLOCATE(zrwet(kbdim,klev,nsol))    ! dry radius for each classe
   !<---eehol
 
   !-->alaak needed for abdul razzak ghan:
@@ -372,7 +416,6 @@ PROGRAM driver
   !<--alaak
 
   !<--eehol: read input variables for cloud activation and wet deposition
-  !ALLOCATE (zin(ldc%nlon,ldc%nlat,47,1))
   ALLOCATE (zin(192,96,47,1))
   cfile = 'input/HAM_box_inp_200007.01_activ.nc'
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "CLC_PRE", zin, ierr)
@@ -436,8 +479,8 @@ PROGRAM driver
   ! Mean diameter of the modes (m)
   dpg = (/0.01, 0.3, 1.0, 3.0, 0.03, 0.3, 3.0/)*1.e-6_dp
   ! Number concentration of modes (#/cm3)
-  n = (/1000.0, 500.0, 100.0, 0.0, 500.0, 0.0, 0.0/)*1.e6_dp
-  
+  n = (/1000.0, 100.0, 10.0, 0.001, 100.0, 10.0, 0.001/)*1.e6_dp
+ 
   !<--eehol: calculate initial size distribution (zaernl) depending on nham_subm
   SELECT CASE(nham_subm)
   CASE(HAM_M7)
@@ -449,13 +492,21 @@ PROGRAM driver
            END DO
         END DO
      END DO
+
      !<--eehol: Opening the output data file for size distribution output
      OPEN(15,FILE='data/num_m7.dat',STATUS='unknown')
      
      ! writing out initial size distribution
      WRITE(15,'(17(A3," "))') column_header_m7
      WRITE(15,665)            zaernl(1,1,1:nclass)
-     !-->eehol
+
+     !<-- Additional step: Open file for dry radius output for HAM_M7
+     OPEN(16,FILE='data/radius_m7.dat',STATUS='unknown')
+
+     ! writing out dry radii
+     WRITE(16,'(17(A3," "))') column_header_m7
+     WRITE(16,665)            zrdry(1,1,1:nclass)
+
   CASE(HAM_SALSA)
      !<--eehol: calculating the initial size distribution (zaernl)
      core(in1a:fn2b) = pi_6 * dpmid(in1a:fn2b)**3
@@ -467,7 +518,14 @@ PROGRAM driver
      ! writing out initial size distribution
      WRITE(15,'(17(A3," "))') column_header
      WRITE(15,665)            zaernl(1,1,in1a:fn2b)
-     !-->eehol
+
+     !<-- Additional step: Open file for dry radius output for HAM_SALSA
+     OPEN(16,FILE='data/radius.dat',STATUS='unknown')
+
+     ! writing out dry radii
+     WRITE(16,'(17(A3," "))') column_header
+     WRITE(16,665)            zrdry(1,1,in1a:fn2b)
+
   END SELECT
   !-->eehol
 
@@ -475,162 +533,157 @@ PROGRAM driver
   CALL conc2mmr(kproma,kbdim,klev,ntrac, &
        pxtm1,zaerml,zaernl,core,zrhoa)
   !-->eehol
-  !<--eehol: use time loop for microphysics interface
-  !DO ii = 1, 86400
 
-     !<--eehol: calculating the gas phase sulfate concentrations   
-     ! setting gas phase sulphate concentration to a fixed value
-     IF(ii > 0) THEN !.AND. ii < 1000) THEN
-         zgas(:,:,isubm_so4g) = 5.E14_dp
-         ! Gas phase concentrations converted from m-3 to cm-3 for compatibility with M7 
-         zgas(1:kproma,:,:) = zgas(1:kproma,:,:) * 1.e-6_dp
-         !<--eehol: converting gas concentration to mixing ratio
-         CALL gas2mmr(kproma,kbdim,klev,ntrac, &
-              pxtm1,zgas,zrhoa,pap,pt)
+  !-----------------------------------------------------------------------------------
+
+  ! Time loop
+  DO ii = 1, 5000
+
+   !-->hhalonen:
+   ! Normal distribution pdf value for sulfate at time ii
+   sulfate_pdf_value = (1.0_dp / (sigma * SQRT(2.0_dp * pi))) * &
+               EXP(-((REAL(ii, dp) - mu)**2) / (2.0_dp * sigma**2))
+
+   ! Normal distribution pdf value for ELVOC at time ii
+   elvoc_pdf_value = (1.0_dp / (sigma2 * SQRT(2.0_dp * pi))) * &
+               EXP(-((REAL(ii, dp) - mu2)**2) / (2.0_dp * sigma2**2))
+   
+   ! Sulfate concentration from the distribution
+   zgas(:,:,isubm_so4g) = sulfate_pdf_value * H2SO4_scaling_factor
+
+   ! ELVOC concentration from the distribution
+   new_pelvoc = elvoc_pdf_value * pelvoc
+   !<--hhalonen
+
+   ! Gas phase concentrations converted from m-3 to cm-3 for compatibility with M7
+   zgas(1:kproma,:,:) = zgas(1:kproma,:,:) * 1.e-6_dp
+
+   ! Convert gas concentration to mixing ratio
+   CALL gas2mmr(kproma, kbdim, klev, ntrac, &
+         pxtm1, zgas, zrhoa, pap, pt)
          !-->eehol
-     END IF
-     !-->eehol
-     
-     !<--eehol: call microphysics interface
-     
-     CALL ham_subm_interface(kproma,  kbdim,   klev,    krow, &  ! ECHAM indices
+
+      !CALL set_nsnucl_nonucl(1, 3)
+      
+      !<--eehol: call microphysics interface
+
+      CALL ham_subm_interface(kproma,  kbdim,   klev,    krow, &  ! ECHAM indices
           ntrac, pap, paph,                                   &  ! number of tracers, pressure full levels, pressure half levels
           pt,    pqm1, pqsm1,                                 &  ! temperature, specific humidity, saturation specific humidity
           pxtm1, pxtte,                                       &  ! tracer mass/number mr, tendencies
           zrwet, zrdry, zrhop, zww,                           &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
           paclc, pgrvolm1, zpbl)                                 ! cloud cover, grid box volume, boundary layer top level
-
-
-     !-->alaak call cloud activation
-     SELECT CASE(nham_subm)
-        
-     CASE(HAM_M7)
-
-!        CALL radii(kproma, kbdim, klev, krow, zrdry)
-!        DO jclass=1, nclass
-!           IF (sizeclass(jclass)%lsoluble) THEN
-!              zrdry(1:kproma,:,jclass)=rdry_class(1:kproma,:,jclass) !eehol: for soluble modes rdry from rdry_class
-!           ELSE
-!              zrdry(1:kproma,:,jclass)=rwet_class(1:kproma,:,jclass) !eehol: for insoluble modes rdry from rwet_class
-!           END IF
-!        END DO
-        zw = 1.0_dp
-        CALL ham_activ_koehler_ab(kproma, kbdim, klev, krow, ktdia, &
-             pxtm1,  pt,  za,   zb    )
-
-        CALL ham_activ_abdulrazzak_ghan(kproma, kbdim, klev, krow, ktdia, &
-             pcdncact, pesw, zrhoa,             &
-             pxtm1, pt, pap, pqm1,         &
-             zw, zwpdf, za, zb, zrdry,         &
-             znact, zfracn, zsc, zrc, zsmax)
-
-        ! HK remove CALL ham_activ_diag_abdulrazzak_ghan_strat(kproma, kbdim, klev,   &
-        !     krow, znact, zfracn,   &
-        !     zrc, zsmax)
-        
-        ! Convective activation uses the stratiform values. This is not
-        ! really correct, but keeps the results identical to those before
-        ! factoring out the koehler_ab and diag routines.
-        ! cdncact_cv(1:kproma,:,krow) = pcdncact(1:kproma,:)
-        
-        ! HK remove CALL ham_activ_diag_abdulrazzak_ghan_conv(kproma, kbdim, klev,   &
-        !     krow, znact, zrc, zsmax)
-        
-     CASE(HAM_SALSA)
-        !>> thk #511: AR&G scheme for SALSA
-        
-        ! for now we decided to not use diagnostics routines
-        ! in order to cut down on output
-
-        CALL salsa_abdul_razzak_ghan(&
-             kproma,   kbdim, klev,  krow, ktop, &
-             pcdncact, pesw,  zrhoa,               &
-             pxtm1,    pt,  pap, pqm1,        &
-             zw,       zwpdf,                     &
-             znact,    zfracn,zsc,   zrc, &
-             zsmax  )
-        ! ECHAM indices
-        ! n of act p (o), saturation water vapour pressure (i),  air density (i)
-        ! tracer mixing ratios at t-d (i), temperature(i),pressure(i), specific humidity(i)
-        ! mean or bins of updraft velocity (i), pdf of updraft velocity (i)
-        ! number of activated p per mode (o), fraction of act. p (o), critical supersat. (o) critical r of act per mode(o)
-        ! maximum supersaturation (o)
-        
-        
-        ! pesw calculated by sat_spec_hum module in ECHAM (uses lookuptables)
-        ! zw and zwpdf calculated by activ_updraft module  
-        
-        ! like for M7:
-        ! Convective activation uses the stratiform values. This is not
-        ! really correct, but keeps the results identical to those before
-        ! factoring out the koehler_ab and diag routines.
-        !             cdncact_cv(1:kproma,:,krow) = pcdncact(1:kproma,:)
-        !<< thk #511
-        
-     END SELECT
-     !<--alaak: call cloud activation
-
-     !-->eehol: initialize mixing ratios for wet deposition
-     !-- initialise in-cloud and interstitial mixing ratios
-     !   set both equal to tracer mixing ratio as starting point
-     !   ham_wet_chemistry will re-compute these values if lham=true
-     DO jt = 1,ntrac
-        zxtp1(1:kproma,:,jt)  = pxtm1(1:kproma,:,jt) + pxtte(1:kproma,:,jt) * time_step_len
-        zxtp1c(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
-        zxtp10(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
-     END DO
-     !<--eehol
+      
+      !-->alaak call cloud activation
+      
+      SELECT CASE(nham_subm)
          
-     !<--eehol: call wetdep interface for wet deposition
-     !-- interface to wet deposition routine (also from cuflx_subm)
-     IF ( lwetdep .AND. ANY(trlist%ti(:)%nwetdep > 0) ) THEN
+      CASE(HAM_M7)
 
-        zdummy(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-        zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-        zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-        
-        CALL wetdep_interface(kproma, kbdim, klev, ktop, krow,      lstrat, &
-             zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-             pmlwc,  pmiwc,                                   &
-             zrwet,  zrdry,                                   &
-             reffi,  reffl,                                   &
-             znact, zfracn,                                   &
-             pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
-             pfrain, pfsnow, pfevapr, pfsubls,                &
-             zdum2d, zdum3d,                                  &
-             paclc,  pclcpre, zrhoa, zdummy)
-        
-     END IF
-     !-->eehol
-     IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
-        
-        CALL sedi_interface(kbdim, kproma, klev, krow,   &
+         !CALL radii(kproma, kbdim, klev, krow, zrdry)
+
+         CALL ham_activ_abdulrazzak_ghan(kproma, kbdim, klev, krow, ktdia, &
+               pcdncact, pesw, zrhoa,             &
+               pxtm1, pt, pap, pqm1,         &
+               zw, zwpdf, za, zb, zrdry,         &
+               znact, zfracn, zsc, zrc, zsmax)
+         
+      CASE(HAM_SALSA)
+         !>> thk #511: AR&G scheme for SALSA
+         
+         ! for now we decided to not use diagnostics routines
+         ! in order to cut down on output
+
+         !CALL radii(kproma, kbdim, klev, krow, zrdry)
+
+         CALL salsa_abdul_razzak_ghan(&
+               kproma,   kbdim, klev,  krow, ktop, &
+               pcdncact, pesw,  zrhoa,               &
+               pxtm1,    pt,  pap, pqm1,        &
+               zw,       zwpdf,                     &
+               znact,    zfracn,zsc,   zrc, &
+               zsmax  )
+         ! ECHAM indices
+         ! n of act p (o), saturation water vapour pressure (i1),  air density (i1)
+         ! tracer mixing ratios at t-d (i1), temperature(i1),pressure(i1), specific humidity(i1)
+         ! mean or bins of updraft velocity (i1), pdf of updraft velocity (i1)
+         ! number of activated p per mode (o), fraction of act. p (o), critical supersat. (o) critical r of act per mode(o)
+         ! maximum supersaturation (o)
+         
+         
+         ! pesw calculated by sat_spec_hum module in ECHAM (uses lookuptables)
+         ! zw and zwpdf calculated by activ_updraft module  
+
+         !<< thk #511
+         
+      END SELECT
+      !<--alaak: call cloud activation
+
+      !-->eehol: initialize mixing ratios for wet deposition
+      !-- initialise in-cloud and interstitial mixing ratios
+      !   set both equal to tracer mixing ratio as starting point
+      !   ham_wet_chemistry will re-compute these values if lham=true
+      DO jt = 1,ntrac
+         zxtp1(1:kproma,:,jt)  = pxtm1(1:kproma,:,jt) + pxtte(1:kproma,:,jt) * time_step_len
+         zxtp1c(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
+         zxtp10(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
+      END DO
+      !<--eehol
+         
+      !<--eehol: call wetdep interface for wet deposition
+      !-- interface to wet deposition routine (also from cuflx_subm)
+      !IF ( lwetdep .AND. ANY(trlist%ti(:)%nwetdep > 0) ) THEN
+      !
+      !   zdummy(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
+      !   zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
+      !   zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
+      !   
+      !   CALL wetdep_interface(kproma, kbdim, klev, ktop, krow,      lstrat, &
+      !       zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
+      !       pmlwc,  pmiwc,                                   &
+      !       zrwet,  zrdry,                                   &
+      !       reffi,  reffl,                                   &
+      !       znact, zfracn,                                   &
+      !       pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
+      !       pfrain, pfsnow, pfevapr, pfsubls,                &
+      !       zdum2d, zdum3d,                                  &
+      !       paclc,  pclcpre, zrhoa, zdummy)
+      !   
+      !END IF
+
+      !!-->eehol
+      IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
+         
+          CALL sedi_interface(kbdim, kproma, klev, krow,   &
              pt,    pqm1,     pap,  paph, zrwet, zrhop, &
              pxtm1, pxtte               )
-    
-     END IF
-     !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
-     pxtm1(1:kproma,:,:) = pxtm1(1:kproma,:,:)+(pxtte(1:kproma,:,:)*time_step_len)
-     pxtte(1:kproma,:,:) = 0._dp
-     !-->eehol
+      
+      END IF
+      !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
+      pxtm1(1:kproma,:,:) = pxtm1(1:kproma,:,:)+(pxtte(1:kproma,:,:)*time_step_len)
+      pxtte(1:kproma,:,:) = 0._dp
+      !-->eehol
 
-     !<--eehol: calculate number concentration and mixing ratios from pxtm1
-     CALL mmr2conc(kproma,kbdim,klev,ntrac, &
-          pxtm1,zaerml,zaernl,zrhoa)
-     !-->eehol
+      !<--eehol: calculate number concentration and mixing ratios from pxtm1
+      CALL mmr2conc(kproma,kbdim,klev,ntrac, &
+            pxtm1,zaerml,zaernl,zrhoa)
+      !-->eehol
 
-     !<--eehol: write number concentration to output data file
-     SELECT CASE(nham_subm)
-     CASE(HAM_M7)
-        WRITE(15,665) zaernl(1,1,1:nclass)
-     CASE(HAM_SALSA)
-        WRITE(15,665) zaernl(1,1,in1a:fn2b)
-     END SELECT
-     !-->eehol
+      !<--eehol: write number concentration to output data file
+      SELECT CASE(nham_subm)
+      CASE(HAM_M7)
+         WRITE(15,665) zaernl(1,1,1:nclass)
+         ! Dry mean darius
+         WRITE(16,665) zrdry(1,1,1:nclass)
+      CASE(HAM_SALSA)
+         WRITE(15,665) zaernl(1,1,in1a:fn2b)
+      END SELECT
+      !-->eehol
 
-     
-  !END DO
-  !-->eehol
+   END DO
+   !-->eehol
+   
+  !-----------------------------------------------------------------------------------
 
   !<--eehol: for writing the size distribution from ham_subm_interface
   ! <-- mirfan: fixing output issues for very small numbers  
