@@ -49,6 +49,8 @@ PROGRAM driver
 
   USE mo_ham, ONLY: aerocomp
   USE mo_tracdef, ONLY: trlist, ntrac
+  USE parkind1, ONLY: JPIM, JPRB
+
   IMPLICIT NONE
 
   
@@ -89,7 +91,7 @@ PROGRAM driver
        pqm1(kbdim,klev),   & !specific humidity
        pqsm1(kbdim,klev),   & !saturation specific humidity
        pgrvolm1(kbdim,klev), & !grid box volume
-       zww(kbdim,klev,krow)
+       zww(kbdim,klev,nmod)
   !-->eehol
 
   !<--eehol: variables for calculating concentrations and mixing ratios
@@ -216,8 +218,28 @@ PROGRAM driver
   REAL(dp), PARAMETER :: cavl3 =    -2.711193_dp
   REAL(dp), PARAMETER :: cavl4 =     1.673952_dp
   REAL(dp), PARAMETER :: cavl5 =     2.433502_dp
+  
+  ! KROW only used in ECHAM but needed inside HAM-codes so set as 1.
+  INTEGER(KIND=JPIM), parameter::zkrow=1
 
   REAL(dp) :: zlinner, ztt
+  REAL(KIND=JPRB)    :: reffi(kbdim, klev, zkrow), reffl(kbdim, klev, zkrow)
+  REAL(KIND=JPRB) :: ZRE_LIQ(kbdim, klev)               ! liquid effective radius
+  REAL(KIND=JPRB) :: ZQLWP(kbdim, klev)
+  REAL(KIND=JPRB) :: ZTMPA
+  REAL(KIND=JPRB) :: ZAP(kbdim, klev)
+  REAL(KIND=JPRB) :: ZEPSEC=1e-14_JPRB
+  REAL(KIND=JPRB) :: RCLDMAX=5.E-3_JPRB                 ! max cloud water
+  REAL(KIND=JPRB) :: MP9_PH(kbdim, klev)
+  REAL(KIND=JPRB) :: ZMIN_CDNC=1.0_JPRB                 ! minimum CDNC 
+  LOGICAL         :: LLIQCLD(kbdim, klev)               ! logical for liquid cloud
+  LOGICAL         :: LICECLD(kbdim, klev)               ! logical for ice cloud
+  REAL(KIND=JPRB) :: MP9PH(kbdim, klev)
+
+  ! For test plotting
+  character(len=*), parameter :: datfile = "zaerml.dat"
+  character(len=256)           :: cmd
+  integer :: lu
   !<--hhalonen
  
 !>>>>
@@ -321,7 +343,7 @@ PROGRAM driver
   !-->eehol
 
   !-->hhalonen
-  ALLOCATE(zrwet(kbdim,klev,nsol))    ! dry radius for each classe
+  ALLOCATE(zrwet(kbdim,klev,nclass))    ! mean mode actual radius (wet for soluble and dry for insoluble modes) [cm]
 
   DO it = jptlucu1-1, jptlucu2+1
 	ztt = fdeltat*REAL(it,dp)
@@ -346,7 +368,7 @@ PROGRAM driver
         pqsm1(jl,jk) = zqs      !saturation specific humidity
      END DO
   END DO
-  paclc(:,:) = 0._dp                     !cloud cover as zero
+  paclc(:,:) = 0.1_dp                    !cloud cover as zero
   pgrvolm1(:,:) = 1.7964E12_dp           !grid box volume [m3] used in m7 diagn
   paph(:,:) = 0._dp                      !define half level pressure as zero
   paph(1:kproma,1) = pap(1:kproma,1)-100 !some value for 1st half level
@@ -419,31 +441,31 @@ PROGRAM driver
   ALLOCATE (zin(192,96,47,1))
   cfile = 'input/HAM_box_inp_200007.01_activ.nc'
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "CLC_PRE", zin, ierr)
-  pclcpre(1:kproma,:) = zin(89,20,33,1)
+  pclcpre(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_RAIN", zin, ierr)
-  pfrain(1:kproma,:) = zin(89,20,33,1)
+  pfrain(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SNOW", zin, ierr)
-  pfsnow(1:kproma,:) = zin(89,20,33,1)
+  pfsnow(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_EVAPR", zin, ierr)
-  pfevapr(1:kproma,:) = zin(89,20,33,1)
+  pfevapr(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SUBLS", zin, ierr)
-  pfsubls(1:kproma,:) = zin(89,20,33,1)
+  pfsubls(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_SNOW_ACL", zin, ierr)
-  pmsnowacl(1:kproma,:) = zin(89,20,33,1)
+  pmsnowacl(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_LWC", zin, ierr)
-  pmlwc(1:kproma,:) = zin(89,20,33,1)
+  pmlwc(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_IWC", zin, ierr)
-  pmiwc(1:kproma,:) = zin(89,20,33,1)
+  pmiwc(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PR", zin, ierr)
-  pmratepr(1:kproma,:) = zin(89,20,33,1)
+  pmratepr(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PS", zin, ierr)
-  pmrateps(1:kproma,:) = zin(89,20,33,1)
+  pmrateps(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ESW", zin, ierr)
-  pesw(1:kproma,:) = zin(89,20,33,1)
+  pesw(1:kproma,:) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETW", zin, ierr)
-  zw(1:kproma,:,nw) = zin(89,20,33,1)
+  zw(1:kproma,:,nw) = zin(89,20,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETWPDF", zin, ierr)
-  zwpdf(1:kproma,:,nw) = zin(89,20,33,1)
+  zwpdf(1:kproma,:,nw) = zin(89,20,47,1)
   
   !<--eehol: testing wet deposition
   ! pclcpre(1:kproma,:) = 0.5_wp
@@ -534,6 +556,52 @@ PROGRAM driver
        pxtm1,zaerml,zaernl,core,zrhoa)
   !-->eehol
 
+  !-->hhalonen
+
+   DO JK=1,klev
+      DO JL=1, kproma
+         ! Cloud fraction PAP => nyt käytetty paclc.
+         ZAP(JL,JK)=MIN(1.0_JPRB,MAX(0.0_JPRB,paclc(JL,JK))) !add threshold for cloud cover
+      ENDDO
+   ENDDO
+
+   ! LWP
+   DO JK=1,klev
+      DO JL=1,kproma
+         IF ( ZAP(JL,JK) >=0.001_JPRB ) THEN
+            ZTMPA = 1.0_JPRB/ZAP(JL,JK)
+            LLIQCLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for liquid cloud
+            LICECLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for ice cloud
+            ZQLWP(JL,JK) = MIN(MAX(0._JPRB, pmlwc(JL,JK)*ZTMPA), RCLDMAX)   ! lwp
+         ELSE
+            LLIQCLD(JL,JK) = .FALSE.
+            LICECLD(JL,JK) = .FALSE.
+            ZQLWP(JL,JK) = 0.0_JPRB
+         END IF
+      END DO
+   END DO
+
+   ! convert from #/m3 to #/cm3 and threshold minimum value to 1 cm-3
+   MP9PH(1:kproma, 1:klev) = MAX((1.0E-6_JPRB)*pcdncact(1:kproma, 1:klev),ZMIN_CDNC)
+
+   DO JK=1,klev
+      DO JL=1,kproma
+         ! effective radius (in um) calculated similarly as in radlswr.F90 
+         ! 2.387e-10 is 3/(4*pi*rho_liq*10^6)  [10^6 for N in right units]
+         ZRE_LIQ(JL,JK) = 1.E+06_JPRB*(2.387e-10_JPRB* &
+            zrhoa(JL,JK)*ZQLWP(JL,JK)/MP9PH(JL,JK))**0.333_JPRB
+      END DO
+   END DO
+
+   ! Add liq. eff. rad. to HAM variables (only if there is liquid cloud 
+   ! else minimum value)
+   reffl(1:kproma,1:klev,zkrow) = MERGE(ZRE_LIQ(1:kproma,1:klev), &
+         4._JPRB, LLIQCLD(1:kproma,1:klev))    ! [um]
+   ! only if there is ice cloud else minimum value
+   reffi(1:kproma,1:klev,zkrow) = MERGE(reffi(1:kproma,1:klev,zkrow), &
+         20._JPRB, LICECLD(1:kproma,1:klev))   ! [um]
+   !<--hhalonen
+
   !-----------------------------------------------------------------------------------
 
   ! Time loop
@@ -562,16 +630,15 @@ PROGRAM driver
    CALL gas2mmr(kproma, kbdim, klev, ntrac, &
          pxtm1, zgas, zrhoa, pap, pt)
          !-->eehol
-
+   
       !CALL set_nsnucl_nonucl(1, 3)
       
       !<--eehol: call microphysics interface
-
-      CALL ham_subm_interface(kproma,  kbdim,   klev,    krow, &  ! ECHAM indices
+      CALL ham_subm_interface(kproma,  kbdim,   klev,    krow,&  ! ECHAM indices
           ntrac, pap, paph,                                   &  ! number of tracers, pressure full levels, pressure half levels
           pt,    pqm1, pqsm1,                                 &  ! temperature, specific humidity, saturation specific humidity
           pxtm1, pxtte,                                       &  ! tracer mass/number mr, tendencies
-          zrwet, zrdry, zrhop, zww,                           &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
+          zrwet, zrdry(:,:,1:4), zrhop, zww,                  &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
           paclc, pgrvolm1, zpbl)                                 ! cloud cover, grid box volume, boundary layer top level
       
       !-->alaak call cloud activation
@@ -624,7 +691,8 @@ PROGRAM driver
       !   set both equal to tracer mixing ratio as starting point
       !   ham_wet_chemistry will re-compute these values if lham=true
       DO jt = 1,ntrac
-         zxtp1(1:kproma,:,jt)  = pxtm1(1:kproma,:,jt) + pxtte(1:kproma,:,jt) * time_step_len
+         zxtp1(1:kproma,:,jt)  = pxtm1(1:kproma,:,jt) + &
+               pxtte(1:kproma,:,jt) * time_step_len
          zxtp1c(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
          zxtp10(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
       END DO
@@ -632,33 +700,33 @@ PROGRAM driver
          
       !<--eehol: call wetdep interface for wet deposition
       !-- interface to wet deposition routine (also from cuflx_subm)
-      !IF ( lwetdep .AND. ANY(trlist%ti(:)%nwetdep > 0) ) THEN
-      !
-      !   zdummy(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-      !   zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-      !   zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-      !   
-      !   CALL wetdep_interface(kproma, kbdim, klev, ktop, krow,      lstrat, &
-      !       zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-      !       pmlwc,  pmiwc,                                   &
-      !       zrwet,  zrdry,                                   &
-      !       reffi,  reffl,                                   &
-      !       znact, zfracn,                                   &
-      !       pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
-      !       pfrain, pfsnow, pfevapr, pfsubls,                &
-      !       zdum2d, zdum3d,                                  &
-      !       paclc,  pclcpre, zrhoa, zdummy)
-      !   
-      !END IF
+      IF ( lwetdep .AND. ANY(trlist%ti(:)%nwetdep > 0) ) THEN
 
-      !!-->eehol
-      IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
+         zdummy(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
+         zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
+         zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
          
-          CALL sedi_interface(kbdim, kproma, klev, krow,   &
-             pt,    pqm1,     pap,  paph, zrwet, zrhop, &
-             pxtm1, pxtte               )
-      
+         CALL wetdep_interface(kproma, kbdim, klev, ktop, krow,      lstrat, &
+             zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
+             pmlwc,  pmiwc,                                   &
+             zrwet,  zrdry,                                   &
+             reffi,  reffl,                                   &
+             znact, zfracn,                                   &
+             pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
+             pfrain, pfsnow, pfevapr, pfsubls,                &
+             zdum2d, zdum3d,                                  &
+             paclc,  pclcpre, zrhoa, zdummy)
+         
       END IF
+      
+      !!-->eehol
+      !IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
+         
+      !    CALL sedi_interface(kbdim, kproma, klev, krow,   &
+      !       pt,    pqm1,     pap,  paph, zrwet, zrhop, &
+      !       pxtm1, pxtte               )
+      
+      !END IF
       !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
       pxtm1(1:kproma,:,:) = pxtm1(1:kproma,:,:)+(pxtte(1:kproma,:,:)*time_step_len)
       pxtte(1:kproma,:,:) = 0._dp
@@ -668,6 +736,20 @@ PROGRAM driver
       CALL mmr2conc(kproma,kbdim,klev,ntrac, &
             pxtm1,zaerml,zaernl,zrhoa)
       !-->eehol
+
+      !-->hhalonen: Test plotting the distribution
+      if (ii == 1 .or. ii == 5000) then
+         open( newunit = lu, file = datfile, status = "replace", action = "write" )
+         do i = 1, naerocomp
+            write(lu,'(I6,1X,ES15.7)')  i,  zaernl(1,1,i)
+         end do
+         close(lu)
+         cmd = 'gnuplot -persist -e "set title ''zaernl''; ' //          &
+            'set xlabel ''Index''; set ylabel ''zaernl''; ' //       &
+            'plot '''//datfile//''' using 1:2 with linespoints lw 2 title ''zaerml''"'
+         call execute_command_line( cmd, wait=.false. )
+      endif
+      !<--hhalonen
 
       !<--eehol: write number concentration to output data file
       SELECT CASE(nham_subm)
