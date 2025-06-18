@@ -5,7 +5,7 @@ PROGRAM driver
   USE mo_ham,          ONLY:nham_subm, naerocomp, &
        subm_ngasspec, &
        HAM_M7, HAM_SALSA,nclass, & !+alaak
-       nsol
+       nsol, aerocomp, sizeclass
        
   USE mo_ham_init
   USE mo_ham_salsa
@@ -16,7 +16,7 @@ PROGRAM driver
   USE mo_kind
   USE mo_time_control
   USE mo_physical_constants, ONLY: vtmpc1, grav, rd, rv
-  USE mo_math_constants,     ONLY: pi_6
+  USE mo_math_constants,     ONLY: pi_6, pi
   USE mo_submodel
   USE mo_filename
   !USE mo_io
@@ -45,11 +45,11 @@ PROGRAM driver
   !-->alaak
   USE mo_ham_salsa_cloud, ONLY: salsa_abdul_razzak_ghan
   !<-- 
-  USE mo_math_constants, ONLY: pi_6, pi
 
-  USE mo_ham, ONLY: aerocomp
-  USE mo_tracdef, ONLY: trlist, ntrac
+  !-->hhalonen
   USE parkind1, ONLY: JPIM, JPRB
+  USE mo_hammoz_drydep, ONLY: drydep_interface
+  !<--hhalonen
 
   IMPLICIT NONE
 
@@ -72,7 +72,7 @@ PROGRAM driver
   !-- aerosol tracers ----------------- 
   INTEGER, PARAMETER :: nmod = 7 ! number of modes
 
-  REAL(dp), ALLOCATABLE :: pxtm1(:,:,:), pxtte(:,:,:) 
+  REAL(dp), ALLOCATABLE :: pxtm1(:,:,:), pxtte(:,:,:)
 
   !-- atmospheric conditions --------------
   REAL(dp) :: &
@@ -96,8 +96,8 @@ PROGRAM driver
 
   !<--eehol: variables for calculating concentrations and mixing ratios
   REAL(dp), ALLOCATABLE :: zgas(:,:,:), &
-       zaerml(:,:,:), &              ! mass mixing ratio of aerosol particles for each grid point
-       zaernl(:,:,:) ! number concentration of aerosol particles
+       zaerml(:,:,:), &        ! mass mixing ratio of aerosol particles for each grid point
+       zaernl(:,:,:)           ! number concentration of aerosol particles
                                ! for each grid point (kbdim,klev) and each
   REAL(dp) :: &
        
@@ -149,7 +149,8 @@ PROGRAM driver
                zb(:,:,:),    & ! hygroscopicity parameter B of the Koehler equation
                zrhop(:,:,:), &
                zrwet(:,:,:),  & ! wet radius for each class
-               zrdry(:,:,:)    ! dry radius for each class
+               zrdry(:,:,:),  & ! dry radius for each class
+               zm6dry(:,:,:)
   REAL(wp) :: zdum2d (kbdim,klev)
   REAL(wp) :: zlfrac_so2(kbdim,klev)     ! liquid tracer fraction (SO2) -ham specific-
   REAL(wp) :: zdpg(kbdim,klev)
@@ -235,10 +236,40 @@ PROGRAM driver
   LOGICAL         :: LLIQCLD(kbdim, klev)               ! logical for liquid cloud
   LOGICAL         :: LICECLD(kbdim, klev)               ! logical for ice cloud
   REAL(KIND=JPRB) :: MP9PH(kbdim, klev)
-
+  REAL(KIND=JPRB) :: ZCFML(kbdim), ZCFMW(kbdim), &
+      ZCFMI(kbdim), ZCFNCL(kbdim), ZCFNCW(kbdim), &
+      ZCFNCI(kbdim), ZEPDU2, ZKAP
+  REAL(KIND=JPRB) :: ZGEOM1(kbdim,klev),        &
+      ZRIL(kbdim), ZRIW(kbdim), ZRII(kbdim),      &
+      ZTVIR1(kbdim,klev), ZTVL(kbdim), ZTVW(kbdim)
+  REAL(KIND=JPRB) :: ZTVI(kbdim), ZAZ0(kbdim),   &
+      ZFRL(kbdim), ZSRFL(kbdim), ZFOREST(kbdim),  &
+      ZTSI(kbdim), ZAZ0L(kbdim)
+  REAL(KIND=JPRB) :: ZAZ0I(kbdim), ZCDNI(kbdim)
+  LOGICAL :: ZLOLAND(kbdim)             ! Land mask
+  REAL(KIND=JPRB) :: PLSM(kbdim) = 0.7  ! Land-sea mask [0-1]
+  REAL(KIND=JPRB) :: ZAZ0W(kbdim), ZFRW(kbdim), &
+      ZCVS(kbdim), ZCVW(kbdim), ZVGRAT(kbdim)      ! rough. len. wat., wat. frac., snow cov. frac., wet skin frac., veg. ratio
+  REAL(KIND=JPRB) :: ZCDNL(kbdim), ZCDNW(kbdim)    ! ustar (in not used variable), aerodynamic resis. on surface (in not used variable)
+  REAL(KIND=JPRB) :: PZ0M(kbdim) = 1.   ! added roughness length for momentum for dry deposition
+  REAL(KIND=JPRB) :: PCI(kbdim) = 0.5   ! added fraction of sea-ice for dry deposition
+  REAL(KIND=JPRB) :: PFRTI(kbdim) = 0.5 ! Tile fractions
+  REAL(KIND=JPRB) :: zdp(kbdim,klev)
+  REAL(KIND=JPRB) :: RG = 9.80665_JPRB             ! Gravity constant
+  REAL(KIND=JPRB) :: PUP(kbdim,klev) = 0.0 ! added u component of wind
+  REAL(KIND=JPRB) :: PVP(kbdim,klev) = 0.0 ! added u component of wind
+  REAL(KIND=JPRB), ALLOCATABLE :: ZDDEPFLUX(:,:)
+  REAL(KIND=JPRB), ALLOCATABLE :: ZXTMD1(:,:,:)      ! tracer mixing ratios for HAM drydep (updated with tend)
+  REAL(KIND=JPRB), ALLOCATABLE :: ZVDEP(:,:)         ! ddep velocity for diagnostics from ham
+  REAL(KIND=JPRB), ALLOCATABLE :: ZTENCIH(:,:,:)     ! for HAM tendencies
+  REAL(KIND=JPRB), ALLOCATABLE :: ZXTEMS(:,:)        ! surface emissions modified by dry deposition
+  
   ! For test plotting
   character(len=*), parameter :: datfile = "zaerml.dat"
-  character(len=256)           :: cmd
+  character(len=3000) :: cmd, plotline
+  real, ALLOCATABLE :: zaernl_series(:,:)
+  character(len=100) :: filename
+  character(len=10)  :: istr
   integer :: lu
   !<--hhalonen
  
@@ -328,8 +359,15 @@ PROGRAM driver
   !*                                               *
   !*************************************************
 
-  !--->hhalonen: Allocate particle density
+  !--->hhalonen
   ALLOCATE(zrhop(kbdim,klev,nclass))
+  ALLOCATE(ZXTMD1(kbdim,klev,ntrac))
+  ALLOCATE(ZVDEP(kbdim,ntrac))
+  ALLOCATE(ZTENCIH(kbdim,klev,ntrac))
+  ALLOCATE(ZXTEMS(kbdim,ntrac))
+  ALLOCATE(ZDDEPFLUX(kbdim,ntrac))
+  ALLOCATE(zaernl_series(5000, nclass))
+  ALLOCATE(zrwet(kbdim,klev,nclass))    ! mean mode actual radius (wet for soluble and dry for insoluble modes) [cm]
   !<---hhalonen
 
   !<--eehol: Allocate tracer mixing ratio + tendency
@@ -343,8 +381,6 @@ PROGRAM driver
   !-->eehol
 
   !-->hhalonen
-  ALLOCATE(zrwet(kbdim,klev,nclass))    ! mean mode actual radius (wet for soluble and dry for insoluble modes) [cm]
-
   DO it = jptlucu1-1, jptlucu2+1
 	ztt = fdeltat*REAL(it,dp)
 	zlinner  = (cavl1/ztt+cavl2+cavl3*0.01_dp*ztt+cavl4*ztt*ztt*1.e-5_dp+cavl5*LOG(ztt))
@@ -368,7 +404,7 @@ PROGRAM driver
         pqsm1(jl,jk) = zqs      !saturation specific humidity
      END DO
   END DO
-  paclc(:,:) = 0.1_dp                    !cloud cover as zero
+  paclc(:,:) = 1._dp                     !cloud cover
   pgrvolm1(:,:) = 1.7964E12_dp           !grid box volume [m3] used in m7 diagn
   paph(:,:) = 0._dp                      !define half level pressure as zero
   paph(1:kproma,1) = pap(1:kproma,1)-100 !some value for 1st half level
@@ -425,6 +461,7 @@ PROGRAM driver
   ALLOCATE(za(kbdim,klev,nclass)) ! curvature parameter A of the Koehler equation
   ALLOCATE(zb(kbdim,klev,nclass)) ! hygroscopicity parameter B of the Koehler equation
   ALLOCATE(zrdry(kbdim,klev,nclass))    ! dry radius for each classe
+  ALLOCATE(zm6dry(kbdim,klev,nsol))     ! dry radius for soluble modes
   !<---eehol
 
   !-->alaak needed for abdul razzak ghan:
@@ -441,32 +478,33 @@ PROGRAM driver
   ALLOCATE (zin(192,96,47,1))
   cfile = 'input/HAM_box_inp_200007.01_activ.nc'
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "CLC_PRE", zin, ierr)
-  pclcpre(1:kproma,:) = zin(89,20,47,1)
+  pclcpre(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_RAIN", zin, ierr)
-  pfrain(1:kproma,:) = zin(89,20,47,1)
+  pfrain(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SNOW", zin, ierr)
-  pfsnow(1:kproma,:) = zin(89,20,47,1)
+  pfsnow(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_EVAPR", zin, ierr)
-  pfevapr(1:kproma,:) = zin(89,20,47,1)
+  pfevapr(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SUBLS", zin, ierr)
-  pfsubls(1:kproma,:) = zin(89,20,47,1)
+  pfsubls(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_SNOW_ACL", zin, ierr)
-  pmsnowacl(1:kproma,:) = zin(89,20,47,1)
+  pmsnowacl(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_LWC", zin, ierr)
-  pmlwc(1:kproma,:) = zin(89,20,47,1)
+  pmlwc(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_IWC", zin, ierr)
-  pmiwc(1:kproma,:) = zin(89,20,47,1)
+  pmiwc(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PR", zin, ierr)
-  pmratepr(1:kproma,:) = zin(89,20,47,1)
+  pmratepr(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PS", zin, ierr)
-  pmrateps(1:kproma,:) = zin(89,20,47,1)
+  pmrateps(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ESW", zin, ierr)
-  pesw(1:kproma,:) = zin(89,20,47,1)
+  pesw(1:kproma,:) = zin(61,29,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETW", zin, ierr)
-  zw(1:kproma,:,nw) = zin(89,20,47,1)
+  !zw(1:kproma,:,nw) = zin(61,29,47,1)
+  zw(1:kproma,:,nw) = 0.5
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETWPDF", zin, ierr)
-  zwpdf(1:kproma,:,nw) = zin(89,20,47,1)
-  
+  zwpdf(1:kproma,:,nw) = zin(61,29,47,1)
+
   !<--eehol: testing wet deposition
   ! pclcpre(1:kproma,:) = 0.5_wp
   ! pfrain(1:kproma,:) = 0.4_wp
@@ -493,7 +531,11 @@ PROGRAM driver
   WRITE(*,*) 'eehol: pdf of updraft velocity =', zwpdf(1:kproma,:,nw)
   WRITE(*,*) 'nham_subm =', nham_subm
   !-->eehol
-    
+
+  za(:,:,:) = 0
+  zb(:,:,:) = 0
+  zsc(:,:,:) = 0
+
   !N=nucleation mode, K=Aitken, A=Accumulation, C=Coarse
   !(NS, KS, AS, CS, KI, AI, CS)
   ! Stdev of modes
@@ -557,22 +599,23 @@ PROGRAM driver
   !-->eehol
 
   !-->hhalonen
+  ! Liquid and ice effective radius for wet deposition.
 
+   ! Threshold for cloud cover
    DO JK=1,klev
       DO JL=1, kproma
-         ! Cloud fraction PAP => nyt käytetty paclc.
-         ZAP(JL,JK)=MIN(1.0_JPRB,MAX(0.0_JPRB,paclc(JL,JK))) !add threshold for cloud cover
+         ZAP(JL,JK)=MIN(1.0_JPRB,MAX(0.0_JPRB,paclc(JL,JK)))
       ENDDO
    ENDDO
 
    ! LWP
    DO JK=1,klev
       DO JL=1,kproma
-         IF ( ZAP(JL,JK) >=0.001_JPRB ) THEN
+         IF (ZAP(JL,JK) >=0.001_JPRB) THEN
             ZTMPA = 1.0_JPRB/ZAP(JL,JK)
             LLIQCLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for liquid cloud
             LICECLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for ice cloud
-            ZQLWP(JL,JK) = MIN(MAX(0._JPRB, pmlwc(JL,JK)*ZTMPA), RCLDMAX)   ! lwp
+            ZQLWP(JL,JK) = MIN(MAX(0._JPRB, pmlwc(JL,JK)*ZTMPA), RCLDMAX) ! lwp
          ELSE
             LLIQCLD(JL,JK) = .FALSE.
             LICECLD(JL,JK) = .FALSE.
@@ -580,57 +623,65 @@ PROGRAM driver
          END IF
       END DO
    END DO
+   !<--hhalonen
 
-   ! convert from #/m3 to #/cm3 and threshold minimum value to 1 cm-3
-   MP9PH(1:kproma, 1:klev) = MAX((1.0E-6_JPRB)*pcdncact(1:kproma, 1:klev),ZMIN_CDNC)
-
-   DO JK=1,klev
-      DO JL=1,kproma
-         ! effective radius (in um) calculated similarly as in radlswr.F90 
-         ! 2.387e-10 is 3/(4*pi*rho_liq*10^6)  [10^6 for N in right units]
-         ZRE_LIQ(JL,JK) = 1.E+06_JPRB*(2.387e-10_JPRB* &
-            zrhoa(JL,JK)*ZQLWP(JL,JK)/MP9PH(JL,JK))**0.333_JPRB
-      END DO
-   END DO
-
-   ! Add liq. eff. rad. to HAM variables (only if there is liquid cloud 
-   ! else minimum value)
-   reffl(1:kproma,1:klev,zkrow) = MERGE(ZRE_LIQ(1:kproma,1:klev), &
-         4._JPRB, LLIQCLD(1:kproma,1:klev))    ! [um]
-   ! only if there is ice cloud else minimum value
-   reffi(1:kproma,1:klev,zkrow) = MERGE(reffi(1:kproma,1:klev,zkrow), &
-         20._JPRB, LICECLD(1:kproma,1:klev))   ! [um]
+   !-->hhalonen: Variables not needed for aerosol dry deposition
+   ZCFML(:) = 0._JPRB
+   ZCFMW(:) = 0._JPRB
+   ZCFMI(:) = 0._JPRB
+   ZCFNCL(:) = 0._JPRB
+   ZCFNCW(:) = 0._JPRB
+   ZCFNCI(:) = 0._JPRB
+   ZEPDU2 = 0._JPRB
+   ZKAP = 0._JPRB
+   ZGEOM1(:,:) = 0._JPRB
+   ZRIL(:) = 0._JPRB
+   ZRIW(:) = 0._JPRB
+   ZRII(:) = 0._JPRB
+   ZTVIR1(:,:) = 0._JPRB
+   ZTVL(:) = 0._JPRB
+   ZTVW(:) = 0._JPRB
+   ZTVI(:) = 0._JPRB
+   ZAZ0(:) = 0._JPRB
+   ZFRL(:) = 0._JPRB
+   ZSRFL(:) = 0._JPRB
+   ZFOREST(:) = 0._JPRB
+   ZTSI(:) = 0._JPRB
+   ZAZ0L(:) = 0._JPRB
+   ZAZ0I(:) = 0._JPRB
+   ZCDNI(:) = 0._JPRB
+   ZDDEPFLUX(1:kbdim,:) = 0._JPRB
    !<--hhalonen
 
   !-----------------------------------------------------------------------------------
 
-  ! Time loop
-  DO ii = 1, 5000
+   ! Time loop
+   DO ii = 1, 5000
 
-   !-->hhalonen:
-   ! Normal distribution pdf value for sulfate at time ii
-   sulfate_pdf_value = (1.0_dp / (sigma * SQRT(2.0_dp * pi))) * &
-               EXP(-((REAL(ii, dp) - mu)**2) / (2.0_dp * sigma**2))
+      !-->hhalonen:
+      ! Normal distribution pdf value for sulfate at time ii
+      sulfate_pdf_value = (1.0_dp / (sigma * SQRT(2.0_dp * pi))) * &
+                  EXP(-((REAL(ii, dp) - mu)**2) / (2.0_dp * sigma**2))
 
-   ! Normal distribution pdf value for ELVOC at time ii
-   elvoc_pdf_value = (1.0_dp / (sigma2 * SQRT(2.0_dp * pi))) * &
-               EXP(-((REAL(ii, dp) - mu2)**2) / (2.0_dp * sigma2**2))
-   
-   ! Sulfate concentration from the distribution
-   zgas(:,:,isubm_so4g) = sulfate_pdf_value * H2SO4_scaling_factor
+      ! Normal distribution pdf value for ELVOC at time ii
+      elvoc_pdf_value = (1.0_dp / (sigma2 * SQRT(2.0_dp * pi))) * &
+                  EXP(-((REAL(ii, dp) - mu2)**2) / (2.0_dp * sigma2**2))
+      
+      ! Sulfate concentration from the distribution
+      zgas(:,:,isubm_so4g) = sulfate_pdf_value * H2SO4_scaling_factor
 
-   ! ELVOC concentration from the distribution
-   new_pelvoc = elvoc_pdf_value * pelvoc
-   !<--hhalonen
+      ! ELVOC concentration from the distribution
+      new_pelvoc = elvoc_pdf_value * pelvoc
+      !<--hhalonen
 
-   ! Gas phase concentrations converted from m-3 to cm-3 for compatibility with M7
-   zgas(1:kproma,:,:) = zgas(1:kproma,:,:) * 1.e-6_dp
+      ! Gas phase concentrations converted from m-3 to cm-3 for compatibility with M7
+      zgas(1:kproma,:,:) = zgas(1:kproma,:,:) * 1.e-6_dp
 
-   ! Convert gas concentration to mixing ratio
-   CALL gas2mmr(kproma, kbdim, klev, ntrac, &
-         pxtm1, zgas, zrhoa, pap, pt)
-         !-->eehol
-   
+      ! Convert gas concentration to mixing ratio
+      CALL gas2mmr(kproma, kbdim, klev, ntrac, &
+            pxtm1, zgas, zrhoa, pap, pt)
+            !-->eehol
+      
       !CALL set_nsnucl_nonucl(1, 3)
       
       !<--eehol: call microphysics interface
@@ -638,10 +689,20 @@ PROGRAM driver
           ntrac, pap, paph,                                   &  ! number of tracers, pressure full levels, pressure half levels
           pt,    pqm1, pqsm1,                                 &  ! temperature, specific humidity, saturation specific humidity
           pxtm1, pxtte,                                       &  ! tracer mass/number mr, tendencies
-          zrwet, zrdry(:,:,1:4), zrhop, zww,                  &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
+          zrwet, zm6dry, zrhop, zww,                          &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
           paclc, pgrvolm1, zpbl)                                 ! cloud cover, grid box volume, boundary layer top level
       
       !-->alaak call cloud activation
+
+      !-->hhalonen:
+      DO kk = 1,nclass
+         IF (sizeclass(kk)%LSOLUBLE) THEN 
+            zrdry(1:kproma,1:klev,kk) = zm6dry(1:kproma,1:klev,kk) !soluble modes rdry from rdry_m7
+         ELSE
+            zrdry(1:kproma,1:klev,kk) = zrwet(1:kproma,1:klev,kk)  !insoluble modes rdry from rwet_m7
+         END IF
+      END DO
+      !<--hhalonen
       
       SELECT CASE(nham_subm)
          
@@ -649,12 +710,18 @@ PROGRAM driver
 
          !CALL radii(kproma, kbdim, klev, krow, zrdry)
 
+         !-->hhalonen
+         ! Getting parameters A and B of the Koehler eq.
+         CALL ham_activ_koehler_ab(kproma, kbdim, klev, krow, ktdia, &
+                                  pxtm1, pt, za, zb)
+         !<--hhalonen
+
          CALL ham_activ_abdulrazzak_ghan(kproma, kbdim, klev, krow, ktdia, &
                pcdncact, pesw, zrhoa,             &
                pxtm1, pt, pap, pqm1,         &
                zw, zwpdf, za, zb, zrdry,         &
                znact, zfracn, zsc, zrc, zsmax)
-         
+
       CASE(HAM_SALSA)
          !>> thk #511: AR&G scheme for SALSA
          
@@ -685,6 +752,28 @@ PROGRAM driver
          
       END SELECT
       !<--alaak: call cloud activation
+
+      !-->hhalonen
+      ! Convert from #/m3 to #/cm3 and threshold minimum value to 1 cm-3
+      MP9PH(1:kproma, 1:klev) = MAX((1.0E-6_JPRB)*pcdncact(1:kproma, 1:klev),ZMIN_CDNC)
+
+      DO JK=1,klev
+         DO JL=1,kproma
+            ! Effective radius (in um). 
+            ! 2.387e-10 is 3/(4*pi*rho_liq*10^6)  [10^6 for N in right units]
+            ZRE_LIQ(JL,JK) = 1.E+06_JPRB*(2.387e-10_JPRB* &
+               zrhoa(JL,JK)*ZQLWP(JL,JK)/MP9PH(JL,JK))**0.333_JPRB
+         END DO
+      END DO
+
+      ! Add liq. eff. rad. to HAM variables (only if there is liquid cloud 
+      ! else minimum value)
+      reffl(1:kproma,1:klev,zkrow) = MERGE(ZRE_LIQ(1:kproma,1:klev), &
+            4._JPRB, LLIQCLD(1:kproma,1:klev))    ! [um]
+      ! only if there is ice cloud else minimum value
+      reffi(1:kproma,1:klev,zkrow) = MERGE(reffi(1:kproma,1:klev,zkrow), &
+            20._JPRB, LICECLD(1:kproma,1:klev))   ! [um]
+      !<--hhalonen
 
       !-->eehol: initialize mixing ratios for wet deposition
       !-- initialise in-cloud and interstitial mixing ratios
@@ -718,14 +807,83 @@ PROGRAM driver
              paclc,  pclcpre, zrhoa, zdummy)
          
       END IF
+
+      !-->hhalonen
+      ! Dry deposition
+      !--> variables for dry deposition
+      DO JL = 1,kproma
+         DO JK = 1,klev
+         ZDP(JL,JK) = paph(JL,JK) - paph(JL,JK-1)
+         END DO
+         IF ( PLSM(JL) < 0.99_JPRB ) THEN
+         ZLOLAND(JL) = .FALSE.
+         ZAZ0W(JL) = PZ0M(JL)
+         ELSE
+         ZLOLAND(JL) = .TRUE.
+         ZAZ0W(JL) = 0._JPRB
+         END IF
+         ZAZ0W(JL)  = MAX(1.0E-5_JPRB,ZAZ0W(JL))  ! threshold roughness length to min value
+         ZFRW(JL)   = MAX(0.,1.-PLSM(JL)-PCI(JL)) ! water fraction = 1 - land mask - sea ice fraction
+         ! Random values for now
+         ZCVS(JL) = 0.5
+         ZCVW(JL) = 0.5
+         ZVGRAT(JL) = 0.5
+         ZCDNL(JL) = 0.5
+         ZCDNW(JL) = 0
+         !ZCVS(JL)   = PFRTI(JL,5)+PFRTI(JL,7)    ! snow cover fraction = Snow on low-veg + snow on bare-soil + snow under high-veg
+         !ZCVW(JL)   = PFRTI(JL,3)                 ! wet skin fraction
+         !ZVGRAT(JL) = PCVL(JL)+PCVH(JL)           ! vegetation ratio = low veg. cover + high veg. cover
+         !ZCDNL(JL)  = PAERUST(JL)                 ! adding ustar to not used variable
+         !ZCDNW(JL) = LOG(ZDZ(JL,KLEV)/PZ0M(JL))/(VKARMAN*PAERUST(JL)) ! calculate aerodyn. resistance on surface to not used variable
+      END DO
+      
+      !--> init values
+      ZTENCIH(1:kproma,1:klev,:) = pxtte(1:kproma,1:klev,:) ! init tendency before drydep
+      ZXTEMS(1:kproma,:)         = 0._JPRB                  ! surface emissions as zero for input
+      ZXTMD1(1:kproma,1:klev,:)  = 0._JPRB
+      ZXTMD1(1:kproma,1:klev,:)  = pxtm1(1:kproma,1:klev,:) + (ZTENCIH(1:kproma,1:klev,:) * time_step_len) ! update mixrat with tendency
+      ZVDEP(1:kproma,:)          = 0._JPRB                  ! ddep velocity as zero
+
+      ! RCHG: Recommendation, those subroutines specific of m7 should have 
+      !       m7 in the name not sure if this is specific or general/common 
+      !       but adapted to m7. Like m7_simple_sulfur_drydep below. 
+      CALL DRYDEP_INTERFACE(kbdim, kproma,  klev, zkrow,                    &
+         & pqm1(:,klev), pqsm1(:,klev), pt(:,klev), ZCFML, ZCFMW, ZCFMI, &
+         & ZCFNCL, ZCFNCW, ZCFNCI,                                       &
+         & ZEPDU2, ZKAP, PUP, PVP, ZGEOM1, ZRIL, ZRIW,                   &
+         & ZRII,                                                         &
+         & ZTVIR1, ZTVL, ZTVW, ZTVI, ZAZ0,                               &
+         & pt(:,klev), ZLOLAND,                                         &
+         & zrwet, ZRHOP,                                                 & ! M7
+         & ZFRL,   ZFRW,  PCI,     ZCVS,   ZCVW,     ZVGRAT,             &
+         & ZSRFL,  PUP(:,klev),     PVP(:,klev),                         & !eehol: FIXME 10m u and v wind from lowest level.. needs to be revised in future!!
+         & ZXTEMS, ZXTMD1, zrhoa(:,klev), paph, ZFOREST, ZTSI,            & !air dens lowest, air press at int.
+         & ZAZ0L, ZAZ0W, ZAZ0I, ZCDNL, ZCDNW, ZCDNI, ZDDEPFLUX, ZVDEP)     !ZCDNL and ZCDNW used for ustar and aerodyn. resist.
+
+      !IF (TRIM(CHEM_SCHEME)=="SimChem")THEN
+      !  CALL v(YDMODEL, KIDIA,KFDIA, kbdim, KLEV, &
+      !       Zxtm1, PCFLX(:,KAERO(1):KAERO(NACTAERO)),  &
+      !       zdp, PGEOH, ZRHO, ZXTTE, PTSPHY,&
+      !       PSO2DD, PGELAM, &
+      !       ZFAERO, ZXTP1, ZDDEPFLUX_SO2)
+      !  ZDDEPFLUX(KIDIA:KFDIA,2)=ZDDEPFLUX_SO2(KIDIA:KFDIA)
+      !END IF
+      
+      !--> modify tendency at surface according to changes in surface emissions
+      DO JT = 1,ntrac
+         DO JL = 1,kproma
+         pxtte(JL,klev,JT) = ZTENCIH(JL,klev,JT) + ((ZXTEMS(JL,JT)*RG)/(zdp(JL,klev)))
+         END DO
+      END DO
+      !<--hhalonen
       
       !!-->eehol
       !IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
          
-      !    CALL sedi_interface(kbdim, kproma, klev, krow,   &
-      !       pt,    pqm1,     pap,  paph, zrwet, zrhop, &
-      !       pxtm1, pxtte               )
-      
+          CALL sedi_interface(kbdim, kproma, klev, krow,   &
+             pt,    pqm1,     pap,  paph, zrwet, zrhop, &
+             pxtm1, pxtte               )
+
       !END IF
       !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
       pxtm1(1:kproma,:,:) = pxtm1(1:kproma,:,:)+(pxtte(1:kproma,:,:)*time_step_len)
@@ -737,18 +895,10 @@ PROGRAM driver
             pxtm1,zaerml,zaernl,zrhoa)
       !-->eehol
 
-      !-->hhalonen: Test plotting the distribution
-      if (ii == 1 .or. ii == 5000) then
-         open( newunit = lu, file = datfile, status = "replace", action = "write" )
-         do i = 1, naerocomp
-            write(lu,'(I6,1X,ES15.7)')  i,  zaernl(1,1,i)
-         end do
-         close(lu)
-         cmd = 'gnuplot -persist -e "set title ''zaernl''; ' //          &
-            'set xlabel ''Index''; set ylabel ''zaernl''; ' //       &
-            'plot '''//datfile//''' using 1:2 with linespoints lw 2 title ''zaerml''"'
-         call execute_command_line( cmd, wait=.false. )
-      endif
+      !-->hhalonen: For test plotting
+      do i = 1, nclass
+         zaernl_series(ii, i) = zaernl(1,1,i)
+      end do
       !<--hhalonen
 
       !<--eehol: write number concentration to output data file
@@ -764,7 +914,7 @@ PROGRAM driver
 
    END DO
    !-->eehol
-   
+
   !-----------------------------------------------------------------------------------
 
   !<--eehol: for writing the size distribution from ham_subm_interface
