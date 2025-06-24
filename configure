@@ -1,0 +1,3 @@
+cp Makefile.in Makefile
+makedepf90 -DSALSA *.F90 > .depend
+cat .depend >> Makefile
