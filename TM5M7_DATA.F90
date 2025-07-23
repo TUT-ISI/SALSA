@@ -1,0 +1,7 @@
+MODULE TM5M7_DATA
+
+    ! hhalonen
+
+    IMPLICIT NONE
+    CHARACTER (len=64), PUBLIC :: TM5M7_DATADIR = './input'
+END MODULE TM5M7_DATA

@@ -132,12 +132,13 @@ MODULE mo_ham_wetdep
                         pmfuxt, prhop1, pdpg,                                         &
                         pm6rp,  pm6dry,                                               &
                         reffi, reffl,                                                 &
-                        pnact, pfracn,                                  &
-                        pice,                                                   &
+                        pnact, pfracn,                                                &
+                        pice,                                                         &
                         peffice, peffwat, pclc, prevap,                               &
                         pdepint, pdepintbc, pdepintbcr, pdepintbcs,                   &
                         pdepintic, pdepintic_nucw, pdepintic_nucm,                    &
-                        pdepintic_nucc, pdepintic_impw, pdepintic_impm, pdepintic_impc)
+                        pdepintic_nucc, pdepintic_impw, pdepintic_impm,               &
+                        pdepintic_impc, pnacttot)
 
   ! master routine for ham scavenging calculations
 
@@ -180,6 +181,9 @@ MODULE mo_ham_wetdep
   REAL(dp), INTENT(in)   :: reffi(kbdim,klev,1), reffl(kbdim,klev,1)
   REAL(dp), INTENT(in)   :: pnact(kbdim,klev,nclass)  !number of activated particles per mode [m-3]
   REAL(dp), INTENT(in)   :: pfracn(kbdim,klev,nclass) !fraction of activated particles per mode
+  !-->hhalonen
+  REAL(dp), INTENT(in)   :: pnacttot(kbdim,klev)  ! total number of activated particles in all modes [m-3]
+  !<--hhalonen
 
   REAL(dp), INTENT(inout) :: pxtte(kbdim,klev,ntrac),  & ! tracer tendency
                              pxtp10(kbdim,klev,ntrac), & ! cloud-free mixing ratio
@@ -337,7 +341,7 @@ MODULE mo_ham_wetdep
                      pm6rp,  pm6dry, &
                      reffi, reffl,   &
                      pnact, pfracn,                                  &
-                     zdxtwat_nuc, zdxtwat_imp, zdxtwat, zxtwat)
+                     zdxtwat_nuc, zdxtwat_imp, zdxtwat, zxtwat, pnacttot)
 
      ENDIF !water scavenging on
 
@@ -350,7 +354,7 @@ MODULE mo_ham_wetdep
                      pm6rp,  pm6dry, &
                      reffi, reffl,   &
                      pnact, pfracn,                                  &
-                     zdxtice_nuc, zdxtice_imp, zdxtice, zxtice)
+                     zdxtice_nuc, zdxtice_imp, zdxtice, zxtice, pnacttot)
 
      ENDIF !ice scavenging on
 
@@ -441,6 +445,10 @@ MODULE mo_ham_wetdep
         CALL bc_snow(kproma, kbdim, klev, krow, ktop, imod, itrac_phase, kscavBCtype, pfsnow)
 
      ENDIF !snow scavenging on
+
+     WRITE(*,*) 'Tracer: ', trlist%ti(kt)%fullname
+     WRITE(*,*) 'sfrain = ', sfrain(1:kproma,:,itrac_phase,imod)
+     WRITE(*,*) 'sfsnow = ', sfsnow(1:kproma,:,itrac_phase,imod)
 
      !--- 1.2.2/ Put everything together:
 
@@ -535,7 +543,7 @@ MODULE mo_ham_wetdep
                      pm6rp,  pm6dry,                                & !in
                      reffi, reffl,                                  & !in
                      pnact, pfracn,                                  &
-                     pdxt_nuc, pdxt_imp, pdxt, pxt)                   !out
+                     pdxt_nuc, pdxt_imp, pdxt, pxt, pnacttot)                   !out
 
   ! In-cloud scavenging master routine
 
@@ -570,6 +578,10 @@ MODULE mo_ham_wetdep
     REAL(dp), INTENT(inout) :: pxt(kbdim,klev)         ! tracer mass (total)
                                                        ! (for relevant phase)
 
+    !-->hhalonen
+    REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev)    ! total number of activated particles in all modes [m-3]
+    !<--hhalonen
+
     !local vars:
     LOGICAL :: ll1(1:kproma,klev)
 
@@ -584,7 +596,7 @@ MODULE mo_ham_wetdep
                         pm6rp,  pm6dry,                                     & !in
                         reffi, reffl,                                       & !in
                         pnact, pfracn,                                  &
-                        zxtfrac, zxtfrac_nuc, zxtfrac_imp)  
+                        zxtfrac, zxtfrac_nuc, zxtfrac_imp, pnacttot)  
   
     !--- Change in in-cloud (strat) or updraft (conv) tracer concentration:
     !>>SF #458 (replacing where statements)
@@ -612,7 +624,7 @@ MODULE mo_ham_wetdep
                             pm6rp,  pm6dry,                            & ! in
                             reffi, reffl,                              & ! in
                             pnact, pfracn,                                  &
-                            pfrac, pfrac_nuc, pfrac_imp)                 ! out
+                            pfrac, pfrac_nuc, pfrac_imp, pnacttot)                 ! out
 
 ! Utility routine to compute the in-cloud scavenging fractions
 
@@ -654,6 +666,10 @@ MODULE mo_ham_wetdep
                              pfrac_imp(kbdim,klev)     ! impaction  scavenging fraction
 
     REAL(dp) :: zcoeff_warm, zcoeff_mix, zcoeff_cold
+
+    !-->hhalonen
+    REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev)  ! total number of activated particles in all modes [m-3]
+    !<--hhalonen
 
     !--> eehol: local variables for SALSA wet deposition
     REAL(dp) :: area_tot(kbdim,klev) !total area of particles (ice cloud scavenging fractions)
@@ -713,7 +729,7 @@ MODULE mo_ham_wetdep
                                         ktrac_phase, kmod,                     &
                                         pm6rp,  pm6dry,                        & !in
                                         pnact, pfracn,                                  &
-                                        prhop1, pxtp1c_sav)
+                                        prhop1, pxtp1c_sav, pnacttot)
                     ENDIF !sfnuc(1,1,kwat_phase,ktrac_phase,kmod) == UNDEF
          
                     pfrac_nuc(1:kproma,:) = sfnuc(1:kproma,:,kwat_phase,ktrac_phase,kmod)
@@ -797,11 +813,14 @@ MODULE mo_ham_wetdep
     pfrac_nuc(1:kproma,:) = MAX(0._dp, MIN(1._dp, pfrac_nuc(1:kproma,:)))
     pfrac_imp(1:kproma,:) = MAX(0._dp, MIN(1._dp, pfrac_imp(1:kproma,:)))
 
+    WRITE(*,*) 'Tracer: ', trlist%ti(kt)%fullname
+    WRITE(*,*) 'Pfrac = ', pfrac(1:kproma,:)
+
   END SUBROUTINE get_icscavfrac
 
   !! ---------------------------------------------------------------------------------------
   SUBROUTINE ic_scav_nuc(kproma, kbdim, klev, krow, kwat_phase, &
-                         ktrac_phase, kmod, pm6rp,  pm6dry, pnact, pfracn,prhop1, pxtp1c_sav)
+                         ktrac_phase, kmod, pm6rp,  pm6dry, pnact, pfracn,prhop1, pxtp1c_sav, pnacttot)
 
 ! Grazia Frontoso, C2SM-ETHZ, 2013 - compute in-cloud size dependent 
 !                                    nucleation scavenging coefficients
@@ -833,6 +852,10 @@ MODULE mo_ham_wetdep
     REAL(dp), INTENT(in)  :: pm6rp(kbdim,klev,nclass), pm6dry(kbdim,klev,nclass)           ! m7:
     REAL(dp), INTENT(in)    :: pnact(kbdim,klev,nclass)  !number of activated particles per mode [m-3]
     REAL(dp), INTENT(in)    :: pfracn(kbdim,klev,nclass) !fraction of activated particles per mode
+
+    !-->hhalonen
+    REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev,nclass)  !number of activated particles per mode [m-3]
+    !<--hhalonen
 
     ! Local variables
     REAL(dp) :: zxie(kbdim,klev),         & ! factor for inverse error function calculation
@@ -880,8 +903,9 @@ MODULE mo_ham_wetdep
       
              !ll1(1:kproma,:) = (zxtp1c(1:kproma,:,idt_cdnc) > zeps_mass) .AND. &
              !                  (pna_m7(1:kproma,:,kmod) > zeps)
+
              ll1(1:kproma,:) = (zxtp1c(1:kproma,:,idt_cdnc) > zeps_mass) .AND. &
-                               (pnact(1:kproma,:,kmod) > zeps)
+                               (pnacttot(1:kproma,:,kmod) > zeps)
 
              !--> HK: modified to use variables instead of streams
              !ztmp1(1:kproma,:) = zxtp1c(1:kproma,:,idt_cdnc) * prhop1(1:kproma,:)                & 

@@ -8,7 +8,7 @@ MOD_FILES = $(F90_SOURCE_FILES:.F90=.o) $(F77_SOURCE_FILES:.f=.o)
 OBJECT_FILES = $(F90_SOURCE_FILES:.F90=.o) $(F77_SOURCE_FILES:.f=.o) $(C_SOURCE_FILES:.c=.o)
 F90 = gfortran
 #F90FLAGS = -cpp -g -O -DNOMPI -D__STANDALONE -D__x86_64 -I./include -I/usr/include/
-F90FLAGS = -cpp -g -fbacktrace -DSALSA -std=legacy -ffpe-trap=invalid,zero,overflow -O -DNOMPI -D__x86_64 -I./include -I/usr/include/
+F90FLAGS = -cpp -g -fbacktrace -std=legacy -ffpe-trap=invalid,zero,overflow -O -DNOMPI -D__x86_64 -I./include -I/usr/include/
 #F90LFLAGS = -cpp -g -O -DNOMPI -D__STANDALONE -D__x86_64 -I./include -I/usr/include/
 LIBS = -lnetcdf -lnetcdff
 

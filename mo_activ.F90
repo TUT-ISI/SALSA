@@ -161,6 +161,7 @@ CONTAINS
        !--- Turbulent vertical velocity:
        !pw(1:kproma,:,1) = MAX(w_min,w_large(1:kproma,:,krow)+ w_turb(1:kproma,:,krow))
        pw(1:kproma,:,1) =  MAX(w_min,zwlarge(1:kproma,:)     + w_turb(1:kproma,:,krow))
+       print *, "TESTIIIIIIIIIIII", pw(1:kproma,:,1)
        w(1)%ptr(1:kproma,:,krow) = pw(1:kproma,:,1)
        ! Only one "bin", with probability of 1. The actual value doesn't
        ! matter so long as it's finite, since it cancels out of the CDNC

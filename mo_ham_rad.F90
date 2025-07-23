@@ -909,6 +909,8 @@ CONTAINS
     USE mo_kind,          ONLY: dp
     USE mo_exception,     ONLY: finish
     USE mo_tracdef,       ONLY: ntrac
+    USE TM5M7_OPTICS_DATA, ONLY : ASWBAND, wavenum1=>ALWWN1, wavenum2=>ALWWN2
+    USE parkind1,         ONLY: JPRB
 #ifdef HAMMOZ
     USE mo_ham_streams,   ONLY: rwet
 #endif
@@ -933,7 +935,7 @@ CONTAINS
 
     !--- Arguments:
 
-    INTEGER,INTENT(IN)      :: kproma , kbdim, klev, krow, kpband, kb_sw,kb_diag,ntype_diaf
+    INTEGER,INTENT(IN)      :: kproma , kbdim, klev, krow, kpband, kb_sw, kb_diag, ntype_diaf
 
     REAL(dp), INTENT(in)    :: ppd_hl(kbdim,klev)                 ! pressure diff between half levels [Pa]
 
@@ -945,7 +947,7 @@ CONTAINS
                                aer_piz_sw_vr(kbdim,klev,kb_sw)    !< aerosol single scattering albedo
 
     ! diagnostic aerosol optical properties
-    logical,intent(in)            :: ldiag_aeropt ! logical for aerosol optics
+    logical,intent(in)     :: ldiag_aeropt ! logical for aerosol optics
     real(dp),intent(in)    :: lambda_diag(kb_diag)
     real(dp),intent(inout) :: zaer_tau_diag(kbdim,klev,kb_diag)
     real(dp),intent(inout) :: zaer_ssa_diag(kbdim,klev,kb_diag)
@@ -1030,6 +1032,11 @@ CONTAINS
              rwet_p => rwet(jclass)%ptr
 #endif
 
+            !-->hhalonen
+            ! Setting ASWBAND, ALWWN1 and ALWWN2 values
+            CALL TM5M7_INIT()
+            !<--hhalonen
+
              DO jwv=1,Nwv_sw+Nwv_sw_opt
 
                 !--- 1.1) Calculate volume averaged refractive index nr and ni:
@@ -1054,7 +1061,12 @@ CONTAINS
 #ifdef HAMMOZ          
                 zxx(1:kproma,:) = 2._dp*pi*rwet_p(1:kproma,:,krow)/lambda(jwv)
 #else
-                zxx(1:kproma,:) = 2._dp*pi*rwet_m7(1:kproma,:,jclass)/lambda(jwv) 
+               !-->hhalonen
+               ! Wavelengths
+               lambda(jwv)=ASWBAND(jwv)%wl*1.E-6_dp
+               !<--hhalonen
+
+               zxx(1:kproma,:) = 2._dp*pi*rwet_m7(1:kproma,:,jclass)/lambda(jwv)
 #endif  
 
                 !--- 1.2) Table-lookup for optical properties:
@@ -1202,10 +1214,14 @@ CONTAINS
 #ifdef HAMMOZ
              rwet_p => rwet(jclass)%ptr
 #endif  
-
              DO jwv=1, Nwv_lw
 
                 jlwv = Nwv_sw+Nwv_sw_opt+jwv ! Total SW wavelengths + LW
+
+                !-->hhalonen
+                !--- Mid-wavelength (mid-wavenumber wavelength):
+                lambda(jlwv) = 2.0_dp/(wavenum1(jwv)+wavenum2(jwv)) * 0.01_dp
+                !<--hhalonen
 
                 !--- 1.1) Calculate volume averaged refractive index nr and ni:
 #ifdef HAMMOZ
@@ -1490,7 +1506,8 @@ CONTAINS
                    zaer_ssa_diag(jl,jk,jwv)  =zaer_ssa_diag(jl,jk,jwv) + &
                                             zaer_tau_diag_vr(jl,ikl,jwv,jclass)*omega_diag(jl,ikl,jwv,jclass)
                    zaer_asym_diag(jl,jk,jwv) =zaer_asym_diag(jl,jk,jwv) + &
-                                            zaer_tau_diag_vr(jl,ikl,jwv,jclass)*omega_diag(jl,ikl,jwv,jclass)*asym_diag(jl,ikl,jwv,jclass)
+                                            zaer_tau_diag_vr(jl,ikl,jwv,jclass)*omega_diag(jl,ikl,jwv,jclass)* &
+                                            asym_diag(jl,ikl,jwv,jclass)
                 END DO
              END DO
           END DO
@@ -1704,11 +1721,11 @@ CONTAINS
     USE mo_ham,           ONLY: nrad, nham_subm, HAM_SALSA, HAM_M7
     USE mo_read_netcdf77, ONLY: read_var_nf77_3d
     USE mo_util_string,   ONLY: separator
-#else !OIFS
+#else
     !USE YOERAD    ,ONLY : nbndlw=> STRATO_CMIP6_NTB !this is really stupid solution
     ! commented by Lwu
     USE YOMMP0      ,ONLY : MYPROC
-    USE MPL_MODULE ,ONLY : MPL_BROADCAST 
+    USE MPL_MODULE ,ONLY : MPL_BROADCAST
     USE TM5M7_DATA, ONLY : TM5M7_DATADIR
     USE TM5M7_OPTICS_DATA, ONLY : NASWBAND,ASWBAND,wavenum1=>ALWWN1, wavenum2=>ALWWN2
 #endif
@@ -1716,7 +1733,7 @@ CONTAINS
     USE mo_exception,     ONLY: finish, message, message_text, em_param, em_error, &
          em_info
     USE mo_species,       ONLY: aero_idx
-
+    USE parkind1,         ONLY: JPRB
 
 
 
@@ -1801,7 +1818,6 @@ CONTAINS
 
              CALL message('ham_rad_initialize', 'Reading lookup table from '//TRIM(ADJUSTL(cfile)), level=em_info)
              INQUIRE (file=cfile,exist=lex)
-
              IF (lex) THEN
                 CALL read_var_nf77_3d (cfile,     "nr",       "ni",     "dis",     &
                      "sigma_1", lut1_sigma, ierr                 )
@@ -1819,7 +1835,6 @@ CONTAINS
                      "pp180_1", lut1_pp180, ierr                 )
                 CALL read_var_nf77_3d (cfile,     "nr",       "ni",     "dis",     &
                      "pp180_2", lut2_pp180, ierr                 )
-
              ELSE
                 CALL message('ham_rad_initialize','file '//TRIM(ADJUSTL(cfile))//' not available', level=em_error)
                 CALL finish('ham_rad_initialize','file '//TRIM(ADJUSTL(cfile))//' missing!',1)
@@ -1909,6 +1924,24 @@ CONTAINS
                 CALL message('', message_text, level=em_param)
              END DO
 #else
+
+             !-->hhalonen
+             ! Wavelength values
+             ASWBAND(14)%wl = 5.254_JPRB
+             ASWBAND(13)%wl = 0.257_JPRB
+             ASWBAND(12)%wl = 0.313_JPRB
+             ASWBAND(11)%wl = 0.398_JPRB
+             ASWBAND(10)%wl = 0.530_JPRB
+             ASWBAND( 9)%wl = 0.697_JPRB
+             ASWBAND( 8)%wl = 0.973_JPRB
+             ASWBAND( 7)%wl = 1.269_JPRB
+             ASWBAND( 6)%wl = 1.447_JPRB
+             ASWBAND( 5)%wl = 1.767_JPRB
+             ASWBAND( 4)%wl = 2.040_JPRB
+             ASWBAND( 3)%wl = 2.308_JPRB
+             ASWBAND( 2)%wl = 2.752_JPRB
+             ASWBAND( 1)%wl = 3.407_JPRB
+             !<--hhalonen
 
              DO jwv=1, Nwv_sw  !Laakso: note different order than HAM (here same as RRTM)        
                 lambda(jwv)=ASWBAND(jwv)%wl*1.E-6_dp

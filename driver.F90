@@ -49,6 +49,8 @@ PROGRAM driver
   !-->hhalonen
   USE parkind1, ONLY: JPIM, JPRB
   USE mo_hammoz_drydep, ONLY: drydep_interface
+  USE mo_ham_rad, ONLY: ham_rad
+  USE TM5M7_OPTICS_DATA, ONLY : NASWBAND
   !<--hhalonen
 
   IMPLICIT NONE
@@ -124,7 +126,7 @@ PROGRAM driver
 
   !<--eehol: variables for wet deposition
   INTEGER :: ktop = 1                     ! top level index
-  LOGICAL, PARAMETER :: lstrat = .TRUE.   !SF this switch is used to keep track in wetdep_interface
+  LOGICAL :: lstrat = .TRUE.              !SF this switch is used to keep track in wetdep_interface
                                           !   whether the call comes from the stratiform routine or
                                           !   the convective one - that's why it's hardcoded here
                                           !eehol: we need to discuss if we do strat and conv clouds separately...
@@ -182,6 +184,10 @@ PROGRAM driver
   REAL(wp), ALLOCATABLE :: zrc(:,:,:,:) ! critical radius of activation per mode [m]
   REAL(wp), ALLOCATABLE :: zsmax(:,:,:)   ! maximum supersaturation
   !<--alaak
+
+  !-->hhalonen
+  REAL(wp), ALLOCATABLE :: znacttot(:,:) ! total number of activated particles in all modes [m-3]
+  !<--hhalonen
   
   REAL(dp) :: mu, sigma, mu2, sigma2
   REAL(dp) :: sulfate_pdf_value, elvoc_pdf_value
@@ -263,7 +269,23 @@ PROGRAM driver
   REAL(KIND=JPRB), ALLOCATABLE :: ZVDEP(:,:)         ! ddep velocity for diagnostics from ham
   REAL(KIND=JPRB), ALLOCATABLE :: ZTENCIH(:,:,:)     ! for HAM tendencies
   REAL(KIND=JPRB), ALLOCATABLE :: ZXTEMS(:,:)        ! surface emissions modified by dry deposition
-  
+  REAL(KIND=JPRB) :: ZTKEM1(kbdim,klev)        ! turbulent kinetic energy
+  REAL(KIND=JPRB) :: ZTUNPAR = 0.8164965_JPRB  ! tuning parameter for sigma_w derived from TKE (square root of 2/3 (isotropy assumption))
+  REAL(KIND=JPRB) :: ZWCAPE(kbdim) = 0._JPRB   ! CAPE as zero as it is not used
+  REAL(wp), ALLOCATABLE :: zvervel(:,:,:)
+  REAL(KIND=JPRB) :: ppd_hl(kbdim, klev)
+  REAL(KIND=JPRB) :: ZAER_TAU(1,kbdim,14,1), &
+      ZAER_SSA(1,kbdim,14),ZAER_ASYM(1,kbdim,14),ZAER_TAU_LW(1,kbdim,16)
+  INTEGER, PARAMETER :: kb_diag = 14
+  REAL(dp)        :: lambda_diag(kb_diag)
+  REAL(dp)        :: zaer_tau_diag(kbdim,klev,kb_diag)
+  REAL(dp)        :: zaer_ssa_diag(kbdim,klev,kb_diag)
+  REAL(dp)        :: zaer_asym_diag(kbdim,klev,kb_diag)
+  CHARACTER(LEN=64) :: cfile2
+  INTEGER         :: kpband
+  LOGICAL         :: ldiag_aeropt
+  INTEGER         :: ntype_diaf
+
   ! For test plotting
   character(len=*), parameter :: datfile = "zaerml.dat"
   character(len=3000) :: cmd, plotline
@@ -306,7 +328,7 @@ PROGRAM driver
 
   !<--eehol: initialize ncd_activ to be 2
   ncd_activ = 2
-  nactivpdf = 0
+  nactivpdf = 1
   !-->eehol
  
   !-- 1. Set control variables
@@ -474,36 +496,47 @@ PROGRAM driver
   ALLOCATE(zsmax(kbdim,klev,nw))   ! maximum supersaturation
   !<--alaak
 
+  !-->hhalonen
+  ALLOCATE(zvervel(kbdim,klev,nw))
+  ALLOCATE(znacttot(kbdim,klev)) ! total number of activated particles in all modes [m-3]
+  !<--hhalonen
+
   !<--eehol: read input variables for cloud activation and wet deposition
   ALLOCATE (zin(192,96,47,1))
   cfile = 'input/HAM_box_inp_200007.01_activ.nc'
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "CLC_PRE", zin, ierr)
-  pclcpre(1:kproma,:) = zin(61,29,47,1)
+  pclcpre(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_RAIN", zin, ierr)
-  pfrain(1:kproma,:) = zin(61,29,47,1)
+  pfrain(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SNOW", zin, ierr)
-  pfsnow(1:kproma,:) = zin(61,29,47,1)
+  pfsnow(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_EVAPR", zin, ierr)
-  pfevapr(1:kproma,:) = zin(61,29,47,1)
+  pfevapr(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SUBLS", zin, ierr)
-  pfsubls(1:kproma,:) = zin(61,29,47,1)
+  pfsubls(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_SNOW_ACL", zin, ierr)
-  pmsnowacl(1:kproma,:) = zin(61,29,47,1)
+  pmsnowacl(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_LWC", zin, ierr)
-  pmlwc(1:kproma,:) = zin(61,29,47,1)
+  pmlwc(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_IWC", zin, ierr)
-  pmiwc(1:kproma,:) = zin(61,29,47,1)
+  pmiwc(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PR", zin, ierr)
-  pmratepr(1:kproma,:) = zin(61,29,47,1)
+  pmratepr(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PS", zin, ierr)
-  pmrateps(1:kproma,:) = zin(61,29,47,1)
+  pmrateps(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ESW", zin, ierr)
-  pesw(1:kproma,:) = zin(61,29,47,1)
+  pesw(1:kproma,:) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETW", zin, ierr)
-  !zw(1:kproma,:,nw) = zin(61,29,47,1)
-  zw(1:kproma,:,nw) = 0.5
+  !zw(1:kproma,:,nw) = zin(131,72,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETWPDF", zin, ierr)
-  zwpdf(1:kproma,:,nw) = zin(61,29,47,1)
+  zwpdf(1:kproma,:,nw) = zin(131,72,47,1)
+
+  !-->hhalonen
+  ! Reading total vertical velocity of activation from the input
+  cfile2 = 'input/GlobalTraj-CE_200801.01_activ_1step.nc'
+  CALL read_var_nf77_4d (cfile2, "lon", "lat", "lev", "time", "W", zin, ierr)
+  zvervel(1:kproma,:,nw) = zin(131,72,47,1)
+  !<--hhalonen
 
   !<--eehol: testing wet deposition
   ! pclcpre(1:kproma,:) = 0.5_wp
@@ -653,10 +686,25 @@ PROGRAM driver
    ZDDEPFLUX(1:kbdim,:) = 0._JPRB
    !<--hhalonen
 
-  !-----------------------------------------------------------------------------------
+   !-->hhalonen: Variables for ham_rad
+   kpband     = 16
+   ntype_diaf = 1
+   ppd_hl(1:kproma, :) = paph(1:kproma, 2:klev+1) - paph(1:kproma, 1:klev) ! Pressure diff between half levels [Pa]
+   ZAER_TAU(1:kproma,:,:,:)     = 1.0_JPRB  ! Aerosol optical thickness
+   ZAER_SSA(1:kproma,:,:)       = 1.0_JPRB  ! Aerosol single scattering albedo
+   ZAER_ASYM(1:kproma,:,:)      = 1.0_JPRB  ! Aerosol asymmetry factor
+   ZAER_TAU_LW(1:kproma,:,:)    = 1.0_JPRB  ! LW optical thickness of aerosols
+   ldiag_aeropt                 = .TRUE.    ! Logical for aerosol optics
+   zaer_tau_diag(1:kproma,:,:)  = 0.0_JPRB  ! Can be 0 in input
+   zaer_ssa_diag(1:kproma,:,:)  = 0.0_JPRB  ! Can be 0 in input
+   zaer_asym_diag(1:kproma,:,:) = 0.0_JPRB  ! Can be 0 in input
+   lambda_diag(:)               = 550.E-9_JPRB
+   !<--hhalonen
+
+   !-----------------------------------------------------------------------------------
 
    ! Time loop
-   DO ii = 1, 5000
+   DO ii = 1, 1000
 
       !-->hhalonen:
       ! Normal distribution pdf value for sulfate at time ii
@@ -703,7 +751,19 @@ PROGRAM driver
          END IF
       END DO
       !<--hhalonen
+
+      !-->hhalonen:
+      ZTKEM1(1:kproma,1:klev) = ((1/ZTUNPAR)**2)*((0.8_JPRB)**2)
+      CALL activ_updraft(kproma, kbdim, klev, krow, &
+         ZTKEM1, ZWCAPE, zvervel, zrhoa, zw, zwpdf)
       
+      CALL ham_rad(kproma, kbdim, klev, krow, kpband, NASWBAND, &
+         pxtm1, ppd_hl, &
+         ZAER_TAU(:,:,:,1), ZAER_SSA, ZAER_ASYM, ZAER_TAU_LW, zrwet, &
+         & ldiag_aeropt, kb_diag, ntype_diaf, &
+         & lambda_diag, zaer_tau_diag, zaer_ssa_diag, zaer_asym_diag)
+      !<--hhalonen
+
       SELECT CASE(nham_subm)
          
       CASE(HAM_M7)
@@ -720,7 +780,7 @@ PROGRAM driver
                pcdncact, pesw, zrhoa,             &
                pxtm1, pt, pap, pqm1,         &
                zw, zwpdf, za, zb, zrdry,         &
-               znact, zfracn, zsc, zrc, zsmax)
+               znact, zfracn, zsc, zrc, zsmax, znacttot)
 
       CASE(HAM_SALSA)
          !>> thk #511: AR&G scheme for SALSA
@@ -794,8 +854,15 @@ PROGRAM driver
          zdummy(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
          zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
          zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
-         
-         CALL wetdep_interface(kproma, kbdim, klev, ktop, krow,      lstrat, &
+
+         pmratepr = 0.001_dp
+         pmrateps = 1.0e-8_dp
+         pfevapr = 1.0e-5_dp
+         pfsubls = 0.0001_dp
+         pmlwc = 1.0_dp
+         pmiwc = 1.0_dp
+
+         CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
              zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
              pmlwc,  pmiwc,                                   &
              zrwet,  zrdry,                                   &
@@ -804,7 +871,26 @@ PROGRAM driver
              pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
              pfrain, pfsnow, pfevapr, pfsubls,                &
              zdum2d, zdum3d,                                  &
-             paclc,  pclcpre, zrhoa, zdummy)
+             paclc,  pclcpre, zrhoa, zdummy, znacttot)
+
+         !-->hhalonen
+         !Convective case for wet deposition
+         !lstrat = .FALSE.
+         !pmratepr = 0.001_dp
+         !pmrateps = 1.0e-8_dp
+         !pfevapr = 1.0e-5_dp
+         !pfsubls = 0.0001_dp
+         !CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
+         !    zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
+         !    pmlwc,  pmiwc,                                   &
+         !    zrwet,  zrdry,                                   &
+         !    reffi,  reffl,                                   &
+         !    znact, zfracn,                                   &
+         !    pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
+         !    pfrain, pfsnow, pfevapr, pfsubls,                &
+         !    zdum2d, zdum3d,                                  &
+         !    paclc,  pclcpre, zrhoa, zdummy)
+         !<--hhalonen
          
       END IF
 
@@ -836,7 +922,7 @@ PROGRAM driver
          !ZCDNL(JL)  = PAERUST(JL)                 ! adding ustar to not used variable
          !ZCDNW(JL) = LOG(ZDZ(JL,KLEV)/PZ0M(JL))/(VKARMAN*PAERUST(JL)) ! calculate aerodyn. resistance on surface to not used variable
       END DO
-      
+
       !--> init values
       ZTENCIH(1:kproma,1:klev,:) = pxtte(1:kproma,1:klev,:) ! init tendency before drydep
       ZXTEMS(1:kproma,:)         = 0._JPRB                  ! surface emissions as zero for input
@@ -847,7 +933,7 @@ PROGRAM driver
       ! RCHG: Recommendation, those subroutines specific of m7 should have 
       !       m7 in the name not sure if this is specific or general/common 
       !       but adapted to m7. Like m7_simple_sulfur_drydep below. 
-      CALL DRYDEP_INTERFACE(kbdim, kproma,  klev, zkrow,                    &
+      CALL drydep_interface(kbdim, kproma,  klev, zkrow,                    &
          & pqm1(:,klev), pqsm1(:,klev), pt(:,klev), ZCFML, ZCFMW, ZCFMI, &
          & ZCFNCL, ZCFNCW, ZCFNCI,                                       &
          & ZEPDU2, ZKAP, PUP, PVP, ZGEOM1, ZRIL, ZRIW,                   &
@@ -859,15 +945,6 @@ PROGRAM driver
          & ZSRFL,  PUP(:,klev),     PVP(:,klev),                         & !eehol: FIXME 10m u and v wind from lowest level.. needs to be revised in future!!
          & ZXTEMS, ZXTMD1, zrhoa(:,klev), paph, ZFOREST, ZTSI,            & !air dens lowest, air press at int.
          & ZAZ0L, ZAZ0W, ZAZ0I, ZCDNL, ZCDNW, ZCDNI, ZDDEPFLUX, ZVDEP)     !ZCDNL and ZCDNW used for ustar and aerodyn. resist.
-
-      !IF (TRIM(CHEM_SCHEME)=="SimChem")THEN
-      !  CALL v(YDMODEL, KIDIA,KFDIA, kbdim, KLEV, &
-      !       Zxtm1, PCFLX(:,KAERO(1):KAERO(NACTAERO)),  &
-      !       zdp, PGEOH, ZRHO, ZXTTE, PTSPHY,&
-      !       PSO2DD, PGELAM, &
-      !       ZFAERO, ZXTP1, ZDDEPFLUX_SO2)
-      !  ZDDEPFLUX(KIDIA:KFDIA,2)=ZDDEPFLUX_SO2(KIDIA:KFDIA)
-      !END IF
       
       !--> modify tendency at surface according to changes in surface emissions
       DO JT = 1,ntrac
@@ -914,6 +991,12 @@ PROGRAM driver
 
    END DO
    !-->eehol
+
+   open(unit=10, file='zaernl_series.dat', status='unknown')
+   do ii = 1, 1000
+      write(10,*) (zaernl_series(ii, i), i = 1, nclass)
+   end do
+   close(10)
 
   !-----------------------------------------------------------------------------------
 

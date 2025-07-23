@@ -927,7 +927,7 @@ MODULE mo_hammoz_wetdep
                               pxtte, pxtp10, pxtp1c,                   &
                               pfrain, pfsnow, pfevapr, pfsubls,        &
                               pmfu, pmfuxt,                            &
-                              paclc, pclc, prhou, pxtbound)
+                              paclc, pclc, prhou, pxtbound, pnacttot)
 
   USE mo_tracdef,       ONLY: ln, ntrac, trlist, AEROSOLMASS, AEROSOLNUMBER, GAS
   USE mo_species,       ONLY: speclist
@@ -976,6 +976,9 @@ MODULE mo_hammoz_wetdep
   REAL(dp), INTENT(inout) :: pxtp10   (kbdim,klev,ntrac) ! ambient  tracer mass mixing ratio (t+dt)
   REAL(dp), INTENT(inout) :: pmfuxt   (kbdim,klev,ntrac) ! updraft mass flux
   REAL(dp), INTENT(inout) :: pxtbound (kbdim,ntrac)      ! conv massfix boundary condition
+  !-->hhalonen
+  REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev)        ! total number of activated particles in all modes [m-3]
+  !<--hhalonen
 
   !--- local variables
 
@@ -1086,7 +1089,7 @@ MODULE mo_hammoz_wetdep
                             zdepintbcs, zdepintic, zdepintic_nucw,          &
                             zdepintic_nucm, zdepintic_nucc,                 &
                             zdepintic_impw, zdepintic_impm,                 &
-                            zdepintic_impc)
+                            zdepintic_impc, pnacttot)
         END IF
 !#ifdef HAMMOZ
             

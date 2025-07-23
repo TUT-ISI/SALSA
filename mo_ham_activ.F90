@@ -80,7 +80,7 @@ CONTAINS
                                         pxtm1,    ptm1,    papm1, pqm1,         &
                                         pw,       pwpdf,   pa,    pb,           &
                                         prdry,    pnact,   pfracn,              &
-                                        psc,      prc,     psmax  )
+                                        psc,      prc,     psmax, pnacttot)
 
 
     ! *ham_activ_abdulrazzak_ghan* calculates the number of activated aerosol 
@@ -146,7 +146,11 @@ CONTAINS
                              pfracn(kbdim,klev,nclass),  & ! fraction of activated particles per mode
                              psc(kbdim,klev,nclass),     & ! critical supersaturation [% 0-1]
                              prc(kbdim,klev,nclass,nw),  & ! critical radius of activation per mode [m]
-                             psmax(kbdim,klev,nw)          ! maximum supersaturation [% 0-1]
+                             psmax(kbdim,klev,nw),       & ! maximum supersaturation [% 0-1]
+    !-->hhalonen
+                             pnacttot(kbdim,klev)          ! total number of activated particles in all modes [m-3]
+    !<--hhalonen
+
     !REAL(dp), INTENT(out) :: pfrac_m7(kbdim,klev,nclass), pna_m7(kbdim,klev,nclass)
 
     REAL(dp), INTENT(in)  :: ptm1(kbdim,klev),           & ! temperature
@@ -206,6 +210,10 @@ CONTAINS
     pnact(1:kproma,:,:)      = 0._dp
     pfracn(1:kproma,:,:)     = 0._dp
     pcdncact(1:kproma,:)     = 0._dp
+
+    !-->hhalonen
+    pnacttot(1:kproma,:)     = 0._dp
+    !<--hhalonen
 
     zeps=EPSILON(1._dp)
 
@@ -397,6 +405,10 @@ CONTAINS
           !<--HK
        END IF
     END DO
+
+    !-->hhalonen
+    pnacttot = SUM(pnact, dim = 3)
+    !<--hhalonen
 
   END SUBROUTINE ham_activ_abdulrazzak_ghan
 

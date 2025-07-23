@@ -517,7 +517,8 @@ MODULE mo_hammoz_drydep
        zhgt(1:kproma)=(paphp1(1:kproma,klev+1)-paphp1(1:kproma,klev))/(pdensair(1:kproma)*grav)
        zalpha(1:kproma)=time_step_len*zvd(1:kproma,jt)/zhgt(1:kproma)
        zaeri(1:kproma)=pxtm1(1:kproma,klev,jt)*EXP(-1.0_dp*zalpha(1:kproma))
-       zdrydepflux(1:kproma)=(pxtm1(1:kproma,klev,jt)-zaeri(1:kproma))*(paphp1(1:kproma,klev+1)-paphp1(1:kproma,klev))*(1.0_dp/time_step_len)*(1.0_dp/grav)
+       zdrydepflux(1:kproma)=(pxtm1(1:kproma,klev,jt)-zaeri(1:kproma))*(paphp1(1:kproma,klev+1)- &
+       paphp1(1:kproma,klev))*(1.0_dp/time_step_len)*(1.0_dp/grav)
        zdrydepflux(1:kproma)=MAX(0._dp,zdrydepflux(1:kproma))
        !<--eehol
 

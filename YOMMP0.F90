@@ -1,0 +1,7 @@
+MODULE YOMMP0
+
+    ! hhalonen
+
+    IMPLICIT NONE
+    INTEGER, PUBLIC :: myproc = 1
+END MODULE YOMMP0
