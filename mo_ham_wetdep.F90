@@ -446,10 +446,6 @@ MODULE mo_ham_wetdep
 
      ENDIF !snow scavenging on
 
-     WRITE(*,*) 'Tracer: ', trlist%ti(kt)%fullname
-     WRITE(*,*) 'sfrain = ', sfrain(1:kproma,:,itrac_phase,imod)
-     WRITE(*,*) 'sfsnow = ', sfsnow(1:kproma,:,itrac_phase,imod)
-
      !--- 1.2.2/ Put everything together:
 
      !--- Calculate fraction of below cloud scavenged tracer:
@@ -523,7 +519,6 @@ MODULE mo_ham_wetdep
 
      zxtp1(1:kproma,:) = pxtm1(1:kproma,:,kt)+pxtte(1:kproma,:,kt)*ztmst
      zxtte(1:kproma,:) = (pxtp10(1:kproma,:,kt)+pxtp1c(1:kproma,:,kt)-zxtp1(1:kproma,:)) / ztmst
-
   ELSE !SF conv case
 
      zxtte(1:kproma,:) = zxtp10(1:kproma,:) / ztmst                                           &
@@ -532,7 +527,7 @@ MODULE mo_ham_wetdep
   ENDIF
 
   pxtte(1:kproma,:,kt) = pxtte(1:kproma,:,kt) + zxtte(1:kproma,:)
-
+  
   END SUBROUTINE ham_wetdep
   
   !!----------------------------------------------------------------------------
@@ -597,7 +592,7 @@ MODULE mo_ham_wetdep
                         reffi, reffl,                                       & !in
                         pnact, pfracn,                                  &
                         zxtfrac, zxtfrac_nuc, zxtfrac_imp, pnacttot)  
-  
+
     !--- Change in in-cloud (strat) or updraft (conv) tracer concentration:
     !>>SF #458 (replacing where statements)
     ll1(1:kproma,:) = (paclc(1:kproma,:) > zmin)
@@ -813,8 +808,6 @@ MODULE mo_ham_wetdep
     pfrac_nuc(1:kproma,:) = MAX(0._dp, MIN(1._dp, pfrac_nuc(1:kproma,:)))
     pfrac_imp(1:kproma,:) = MAX(0._dp, MIN(1._dp, pfrac_imp(1:kproma,:)))
 
-    WRITE(*,*) 'Tracer: ', trlist%ti(kt)%fullname
-    WRITE(*,*) 'Pfrac = ', pfrac(1:kproma,:)
 
   END SUBROUTINE get_icscavfrac
 
@@ -854,7 +847,7 @@ MODULE mo_ham_wetdep
     REAL(dp), INTENT(in)    :: pfracn(kbdim,klev,nclass) !fraction of activated particles per mode
 
     !-->hhalonen
-    REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev,nclass)  !number of activated particles per mode [m-3]
+    REAL(dp), INTENT(in)    :: pnacttot(kbdim,klev)  !number of activated particles per mode [m-3]
     !<--hhalonen
 
     ! Local variables
@@ -905,13 +898,13 @@ MODULE mo_ham_wetdep
              !                  (pna_m7(1:kproma,:,kmod) > zeps)
 
              ll1(1:kproma,:) = (zxtp1c(1:kproma,:,idt_cdnc) > zeps_mass) .AND. &
-                               (pnacttot(1:kproma,:,kmod) > zeps)
+                               (pnacttot(1:kproma,:) > zeps)
 
              !--> HK: modified to use variables instead of streams
              !ztmp1(1:kproma,:) = zxtp1c(1:kproma,:,idt_cdnc) * prhop1(1:kproma,:)                & 
              !                  * pfrac_m7(1:kproma,:,kmod) / MAX(pna_m7(1:kproma,:,kmod),zeps)
              ztmp1(1:kproma,:) = zxtp1c(1:kproma,:,idt_cdnc) * prhop1(1:kproma,:)                & 
-                               * pfracn(1:kproma,:,kmod) / MAX(pnact(1:kproma,:,kmod),zeps)
+                               * pfracn(1:kproma,:,kmod) / MAX(pnacttot(1:kproma,:),zeps)
              !<-- HK
              
           CASE(2) !ice

@@ -51,6 +51,8 @@ PROGRAM driver
   USE mo_hammoz_drydep, ONLY: drydep_interface
   USE mo_ham_rad, ONLY: ham_rad
   USE TM5M7_OPTICS_DATA, ONLY : NASWBAND
+  USE mo_species, ONLY : speclist, nspec
+  USE mo_ham_m7_trac, ONLY : idt_cdnc_ham, idt_icnc_ham
   !<--hhalonen
 
   IMPLICIT NONE
@@ -287,9 +289,13 @@ PROGRAM driver
   INTEGER         :: ntype_diaf
 
   ! For test plotting
+  REAL(dp) :: ZSEDIFLUX(kbdim, klev)     ! sedimentation flux
   character(len=*), parameter :: datfile = "zaerml.dat"
   character(len=3000) :: cmd, plotline
   real, ALLOCATABLE :: zaernl_series(:,:)
+  real, ALLOCATABLE :: zdrydepflux_series(:,:)
+  real, ALLOCATABLE :: zsediflux_series(:,:)
+  real, ALLOCATABLE :: zwetdepflux_series(:,:)
   character(len=100) :: filename
   character(len=10)  :: istr
   integer :: lu
@@ -381,6 +387,11 @@ PROGRAM driver
   !*                                               *
   !*************************************************
 
+  !-->eehol: init cdnc and icnc index
+  idt_cdnc = idt_cdnc_ham
+  idt_icnc = idt_icnc_ham
+  !<--eehol
+
   !--->hhalonen
   ALLOCATE(zrhop(kbdim,klev,nclass))
   ALLOCATE(ZXTMD1(kbdim,klev,ntrac))
@@ -388,7 +399,10 @@ PROGRAM driver
   ALLOCATE(ZTENCIH(kbdim,klev,ntrac))
   ALLOCATE(ZXTEMS(kbdim,ntrac))
   ALLOCATE(ZDDEPFLUX(kbdim,ntrac))
-  ALLOCATE(zaernl_series(5000, nclass))
+  ALLOCATE(zaernl_series(1000, nclass))
+  ALLOCATE(zdrydepflux_series(1000, ntrac))
+  ALLOCATE(zsediflux_series(1000, ntrac))
+  ALLOCATE(zwetdepflux_series(1000,1))
   ALLOCATE(zrwet(kbdim,klev,nclass))    ! mean mode actual radius (wet for soluble and dry for insoluble modes) [cm]
   !<---hhalonen
 
@@ -505,37 +519,37 @@ PROGRAM driver
   ALLOCATE (zin(192,96,47,1))
   cfile = 'input/HAM_box_inp_200007.01_activ.nc'
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "CLC_PRE", zin, ierr)
-  pclcpre(1:kproma,:) = zin(131,72,47,1)
+  pclcpre(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_RAIN", zin, ierr)
-  pfrain(1:kproma,:) = zin(131,72,47,1)
+  pfrain(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SNOW", zin, ierr)
-  pfsnow(1:kproma,:) = zin(131,72,47,1)
+  pfsnow(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_EVAPR", zin, ierr)
-  pfevapr(1:kproma,:) = zin(131,72,47,1)
+  pfevapr(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "F_SUBLS", zin, ierr)
-  pfsubls(1:kproma,:) = zin(131,72,47,1)
+  pfsubls(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_SNOW_ACL", zin, ierr)
-  pmsnowacl(1:kproma,:) = zin(131,72,47,1)
+  pmsnowacl(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_LWC", zin, ierr)
-  pmlwc(1:kproma,:) = zin(131,72,47,1)
+  pmlwc(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_IWC", zin, ierr)
-  pmiwc(1:kproma,:) = zin(131,72,47,1)
+  pmiwc(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PR", zin, ierr)
-  pmratepr(1:kproma,:) = zin(131,72,47,1)
+  pmratepr(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "M_RATE_PS", zin, ierr)
-  pmrateps(1:kproma,:) = zin(131,72,47,1)
+  pmrateps(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ESW", zin, ierr)
-  pesw(1:kproma,:) = zin(131,72,47,1)
+  pesw(1:kproma,:) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETW", zin, ierr)
-  !zw(1:kproma,:,nw) = zin(131,72,47,1)
+  !zw(1:kproma,:,nw) = zin(85,25,47,1)
   CALL read_var_nf77_4d (cfile, "lon", "lat", "lev", "time", "ZETWPDF", zin, ierr)
-  zwpdf(1:kproma,:,nw) = zin(131,72,47,1)
+  zwpdf(1:kproma,:,nw) = zin(85,25,47,1)
 
   !-->hhalonen
   ! Reading total vertical velocity of activation from the input
   cfile2 = 'input/GlobalTraj-CE_200801.01_activ_1step.nc'
   CALL read_var_nf77_4d (cfile2, "lon", "lat", "lev", "time", "W", zin, ierr)
-  zvervel(1:kproma,:,nw) = zin(131,72,47,1)
+  zvervel(1:kproma,:,nw) = zin(85,25,47,1)
   !<--hhalonen
 
   !<--eehol: testing wet deposition
@@ -568,6 +582,8 @@ PROGRAM driver
   za(:,:,:) = 0
   zb(:,:,:) = 0
   zsc(:,:,:) = 0
+
+  print *, "pmlwc ============== ", pmlwc
 
   !N=nucleation mode, K=Aitken, A=Accumulation, C=Coarse
   !(NS, KS, AS, CS, KI, AI, CS)
@@ -647,7 +663,7 @@ PROGRAM driver
          IF (ZAP(JL,JK) >=0.001_JPRB) THEN
             ZTMPA = 1.0_JPRB/ZAP(JL,JK)
             LLIQCLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for liquid cloud
-            LICECLD(JL,JK) = (pmlwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for ice cloud
+            LICECLD(JL,JK) = (pmiwc(JL,JK)*ZTMPA) > ZEPSEC ! logical for ice cloud
             ZQLWP(JL,JK) = MIN(MAX(0._JPRB, pmlwc(JL,JK)*ZTMPA), RCLDMAX) ! lwp
          ELSE
             LLIQCLD(JL,JK) = .FALSE.
@@ -813,6 +829,10 @@ PROGRAM driver
       END SELECT
       !<--alaak: call cloud activation
 
+      !-->eehol: add cdnc to tracers
+      pxtm1(1:kproma,:,idt_cdnc) = (MAX(pcdncact(1:kproma,:),((1.0E6_dp)*ZMIN_CDNC)))/zrhoa(1:kproma,:)
+      !<--eehol
+
       !-->hhalonen
       ! Convert from #/m3 to #/cm3 and threshold minimum value to 1 cm-3
       MP9PH(1:kproma, 1:klev) = MAX((1.0E-6_JPRB)*pcdncact(1:kproma, 1:klev),ZMIN_CDNC)
@@ -855,16 +875,17 @@ PROGRAM driver
          zdum2d(1:kproma,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
          zdum3d(1:kproma,:,:) = 0._dp !eehol: initialize dummy variables (is this necessary?)
 
-         pmratepr = 0.001_dp
-         pmrateps = 1.0e-8_dp
-         pfevapr = 1.0e-5_dp
-         pfsubls = 0.0001_dp
-         pmlwc = 1.0_dp
-         pmiwc = 1.0_dp
+         !pmratepr = 0.001_dp
+         !pmrateps = 1.0e-8_dp
+         !pfevapr = 1.0e-5_dp
+         !pfsubls = 0.0001_dp
+         !pmlwc = 1.0_dp
+         !pmiwc = 1.0_dp
 
+         lstrat = .TRUE.
          CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
              zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-             pmlwc,  pmiwc,                                   &
+             ZQLWP,  pmiwc,                                   &
              zrwet,  zrdry,                                   &
              reffi,  reffl,                                   &
              znact, zfracn,                                   &
@@ -876,20 +897,16 @@ PROGRAM driver
          !-->hhalonen
          !Convective case for wet deposition
          !lstrat = .FALSE.
-         !pmratepr = 0.001_dp
-         !pmrateps = 1.0e-8_dp
-         !pfevapr = 1.0e-5_dp
-         !pfsubls = 0.0001_dp
          !CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
          !    zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-         !    pmlwc,  pmiwc,                                   &
+         !    ZQLWP,  pmiwc,                                   &
          !    zrwet,  zrdry,                                   &
          !    reffi,  reffl,                                   &
          !    znact, zfracn,                                   &
          !    pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
          !    pfrain, pfsnow, pfevapr, pfsubls,                &
          !    zdum2d, zdum3d,                                  &
-         !    paclc,  pclcpre, zrhoa, zdummy)
+         !    paclc,  pclcpre, zrhoa, zdummy, znacttot)
          !<--hhalonen
          
       END IF
@@ -954,14 +971,14 @@ PROGRAM driver
       END DO
       !<--hhalonen
       
-      !!-->eehol
-      !IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
+      !-->eehol
+      IF (lsedimentation .AND. ANY(trlist%ti(:)%nsedi > 0)) THEN
          
           CALL sedi_interface(kbdim, kproma, klev, krow,   &
              pt,    pqm1,     pap,  paph, zrwet, zrhop, &
-             pxtm1, pxtte               )
+             pxtm1, pxtte, ZSEDIFLUX               )
 
-      !END IF
+      END IF
       !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
       pxtm1(1:kproma,:,:) = pxtm1(1:kproma,:,:)+(pxtte(1:kproma,:,:)*time_step_len)
       pxtte(1:kproma,:,:) = 0._dp
@@ -976,6 +993,13 @@ PROGRAM driver
       do i = 1, nclass
          zaernl_series(ii, i) = zaernl(1,1,i)
       end do
+      do i = 1, ntrac
+         zdrydepflux_series(ii, i) = ZDDEPFLUX(1,i)
+      end do
+      do i = 1, ntrac
+         zsediflux_series(ii, i) = ZSEDIFLUX(1,i)
+      end do
+      zwetdepflux_series(ii,1) = zdum2d(1,1)
       !<--hhalonen
 
       !<--eehol: write number concentration to output data file
@@ -992,11 +1016,32 @@ PROGRAM driver
    END DO
    !-->eehol
 
+   !-->hhalonen
+   ! Test plotting
    open(unit=10, file='zaernl_series.dat', status='unknown')
    do ii = 1, 1000
       write(10,*) (zaernl_series(ii, i), i = 1, nclass)
    end do
    close(10)
+
+   open(unit=11, file='zdrydepflux_series.dat', status='unknown')
+   do ii = 1, 1000
+      write(11,*) (zdrydepflux_series(ii, i), i = 1, ntrac)
+   end do
+   close(11)
+
+   open(unit=12, file='zsediflux_series.dat', status='unknown')
+   do ii = 1, 1000
+      write(12,*) (zsediflux_series(ii, i), i = 1, ntrac)
+   end do
+   close(12)
+
+   open(unit=13, file='zwetdepflux_series.dat', status='unknown')
+   do ii = 1, 1000
+      write(13,*) (zwetdepflux_series(ii,1))
+   end do
+   close(13)
+   !<--hhalonen
 
   !-----------------------------------------------------------------------------------
 

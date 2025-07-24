@@ -1073,6 +1073,7 @@ MODULE mo_hammoz_wetdep
             IF ( (jscavICtype+jscavBCtype) == 0 ) CYCLE
 
             !--- process scavenging:
+            
             CALL ham_wetdep(kproma, kbdim, klev, krow, ktop,                & 
                             jt,                                             &
                             jscavICtype, jscavBCtype,                       &
@@ -1090,6 +1091,7 @@ MODULE mo_hammoz_wetdep
                             zdepintic_nucm, zdepintic_nucc,                 &
                             zdepintic_impw, zdepintic_impm,                 &
                             zdepintic_impc, pnacttot)
+
         END IF
 !#ifdef HAMMOZ
             

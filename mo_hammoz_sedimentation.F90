@@ -207,7 +207,7 @@ MODULE mo_hammoz_sedimentation
                             pt,    pq,                      &
                             pap,   paph,                    &
                             pm6rp, prhop, & !mean mode actual radius [m], mean mode particle density [kg m-3]
-                            pxtm1,  pxtte              )
+                            pxtm1,  pxtte, zsediflux              )
 
 
   USE mo_tracdef,              ONLY: ntrac, trlist
@@ -225,7 +225,8 @@ MODULE mo_hammoz_sedimentation
                              pq(kbdim, klev),         & ! specific humidity 
                              pap(kbdim, klev),        & ! full level pressure
                              paph(kbdim, klev+1),     & ! half level pressure
-                             pxtm1(kbdim,klev,ntrac)    ! tracer mass/number mixing ratio
+                             pxtm1(kbdim,klev,ntrac), & ! tracer mass/number mixing ratio
+                             zsediflux(kbdim, klev)     ! sedimentation flux
 
   REAL(dp), INTENT(in)    :: pm6rp(kbdim, klev, nclass), prhop(kbdim, klev, nclass)
 
@@ -241,8 +242,8 @@ MODULE mo_hammoz_sedimentation
                    zdz(kbdim, klev),      &  ! layer thickness (length)
                    zxtp1(kbdim, klev),    &  ! updated tracer(jt) 
                    zxtte(kbdim, klev),    &  ! tracer(jt) tendency
-                   zvsedi(kbdim, klev),   &  ! sedimentation velocity
-                   zsediflux(kbdim, klev)    ! sedimentation flux
+                   zvsedi(kbdim, klev)!,   &  ! sedimentation velocity
+                   !zsediflux(kbdim, klev)    ! sedimentation flux
   REAL(dp), POINTER    :: fld2d(:,:)         ! pointer for diagnostics
 
   !--- calculate tracer independent physical variables
