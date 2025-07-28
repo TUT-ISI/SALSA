@@ -526,6 +526,9 @@ MODULE mo_ham_wetdep
 
   ENDIF
 
+  WRITE(*,*) 'modename: ', trlist%ti(kt)%fullname
+  WRITE(*,*) 'zxtte in wetdep =', zxtte
+
   pxtte(1:kproma,:,kt) = pxtte(1:kproma,:,kt) + zxtte(1:kproma,:)
   
   END SUBROUTINE ham_wetdep
@@ -595,6 +598,7 @@ MODULE mo_ham_wetdep
 
     !--- Change in in-cloud (strat) or updraft (conv) tracer concentration:
     !>>SF #458 (replacing where statements)
+
     ll1(1:kproma,:) = (paclc(1:kproma,:) > zmin)
 
     ztmp1(1:kproma,:)    = pxt(1:kproma,:)*zxtfrac_nuc(1:kproma,:)*peff(1:kproma,:)

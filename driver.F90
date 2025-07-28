@@ -76,7 +76,8 @@ PROGRAM driver
   !-- aerosol tracers ----------------- 
   INTEGER, PARAMETER :: nmod = 7 ! number of modes
 
-  REAL(dp), ALLOCATABLE :: pxtm1(:,:,:), pxtte(:,:,:)
+  REAL(dp), ALLOCATABLE :: pxtm1(:,:,:), pxtte(:,:,:), pxtte_wetdepstrat(:,:,:), &
+      pxtte_wetdepconv(:,:,:), pxtte_drydep(:,:,:), pxtte_sedi(:,:,:), pxtte_in(:,:,:)
 
   !-- atmospheric conditions --------------
   REAL(dp) :: &
@@ -142,7 +143,20 @@ PROGRAM driver
   REAL(wp) :: pmiwc    (kbdim,klev)       ! cloud ice    content before rain [kg/kg]
   REAL(wp) :: pmratepr (kbdim,klev)       ! rain formation rate in cloudy part
   REAL(wp) :: pmrateps (kbdim,klev)       ! ice  formation rate in cloudy part
-  
+
+  !-->hhalonen
+  ! For convective wetdep
+  REAL(wp) :: pclcpre_conv   (kbdim,klev)  ! fraction of grid box covered by precip
+  REAL(wp) :: pmratepr_conv  (kbdim,klev)  ! rain formation rate in cloudy part
+  REAL(wp) :: pmrateps_conv  (kbdim,klev)  ! ice  formation rate in cloudy part
+  REAL(wp) :: pfevapr_conv   (kbdim,klev)  ! evaporation of rain [kg/m2/s]
+  REAL(wp) :: pfsubls_conv   (kbdim,klev)  ! sublimation of snow [kg/m2/s]
+  REAL(wp) :: pfrain_conv    (kbdim,klev)  ! rain flux before evaporation [kg/m2/s]
+  REAL(wp) :: pfsnow_conv    (kbdim,klev)  
+  REAL(wp) :: zdum2d_conv    (kbdim,klev)
+  REAL(wp) :: PMFU           (kbdim,klev)  
+  !<--hhalonen
+
   !local variables for wet deposition
   REAL(wp), ALLOCATABLE :: zdum3d(:,:,:)
   REAL(wp), ALLOCATABLE :: zxtp1(:,:,:)  ! updated tracer mass/number mixing ratio
@@ -194,8 +208,6 @@ PROGRAM driver
   REAL(dp) :: mu, sigma, mu2, sigma2
   REAL(dp) :: sulfate_pdf_value, elvoc_pdf_value
   REAL(dp) :: H2SO4_scaling_factor
-
-  REAL(dp) :: ptime ! Time step length
 
   INTEGER :: i, j
 
@@ -289,13 +301,13 @@ PROGRAM driver
   INTEGER         :: ntype_diaf
 
   ! For test plotting
-  REAL(dp) :: ZSEDIFLUX(kbdim, klev)     ! sedimentation flux
   character(len=*), parameter :: datfile = "zaerml.dat"
   character(len=3000) :: cmd, plotline
   real, ALLOCATABLE :: zaernl_series(:,:)
   real, ALLOCATABLE :: zdrydepflux_series(:,:)
   real, ALLOCATABLE :: zsediflux_series(:,:)
-  real, ALLOCATABLE :: zwetdepflux_series(:,:)
+  real, ALLOCATABLE :: zwetdepstratflux_series(:,:)
+  real, ALLOCATABLE :: zwetdepconvflux_series(:,:)
   character(len=100) :: filename
   character(len=10)  :: istr
   integer :: lu
@@ -315,7 +327,6 @@ PROGRAM driver
   mu2 = 2000.0_dp      ! Mean of the ELVOC distribution (seconds)
   sigma2 = 200.0_dp    ! Standard deviation of the ELVOC distribution (seconds)
   !<--hhalonen
-  ptime = 1.0_dp
 
   !-->hhalonen:
   ! ELVOC concentration: 1.6E7 cm^-3
@@ -402,18 +413,30 @@ PROGRAM driver
   ALLOCATE(zaernl_series(1000, nclass))
   ALLOCATE(zdrydepflux_series(1000, ntrac))
   ALLOCATE(zsediflux_series(1000, ntrac))
-  ALLOCATE(zwetdepflux_series(1000,1))
+  ALLOCATE(zwetdepstratflux_series(1000,ntrac))
+  ALLOCATE(zwetdepconvflux_series(1000,ntrac))
   ALLOCATE(zrwet(kbdim,klev,nclass))    ! mean mode actual radius (wet for soluble and dry for insoluble modes) [cm]
   !<---hhalonen
 
   !<--eehol: Allocate tracer mixing ratio + tendency
   ALLOCATE(pxtm1(kbdim,klev,ntrac))
   ALLOCATE(pxtte(kbdim,klev,ntrac))
+  ALLOCATE(pxtte_wetdepstrat(kbdim,klev,ntrac))
+  ALLOCATE(pxtte_wetdepconv(kbdim,klev,ntrac))
+  ALLOCATE(pxtte_drydep(kbdim,klev,ntrac))
+  ALLOCATE(pxtte_sedi(kbdim,klev,ntrac))
+  ALLOCATE(pxtte_in(kbdim,klev,ntrac))
+  
   !-->eehol
   
   !<--eehol: initialize tracer mixing ratio and tendency
   pxtm1(:,:,:) = 0.0_dp
   pxtte(:,:,:) = 0.0_dp
+  pxtte_wetdepstrat(:,:,:) = 0.0_dp
+  pxtte_wetdepconv(:,:,:) = 0.0_dp
+  pxtte_drydep(:,:,:) = 0.0_dp
+  pxtte_sedi(:,:,:) = 0.0_dp
+  pxtte_in(:,:,:) = 0.0_dp
   !-->eehol
 
   !-->hhalonen
@@ -582,8 +605,6 @@ PROGRAM driver
   za(:,:,:) = 0
   zb(:,:,:) = 0
   zsc(:,:,:) = 0
-
-  print *, "pmlwc ============== ", pmlwc
 
   !N=nucleation mode, K=Aitken, A=Accumulation, C=Coarse
   !(NS, KS, AS, CS, KI, AI, CS)
@@ -881,11 +902,13 @@ PROGRAM driver
          !pfsubls = 0.0001_dp
          !pmlwc = 1.0_dp
          !pmiwc = 1.0_dp
-
          lstrat = .TRUE.
+
+         pxtte_in = pxtte
+         
          CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
              zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-             ZQLWP,  pmiwc,                                   &
+             pmlwc,  pmiwc,                                   &
              zrwet,  zrdry,                                   &
              reffi,  reffl,                                   &
              znact, zfracn,                                   &
@@ -894,19 +917,45 @@ PROGRAM driver
              zdum2d, zdum3d,                                  &
              paclc,  pclcpre, zrhoa, zdummy, znacttot)
 
+         pxtte_wetdepstrat(1:kproma,:,:) = pxtte_in(1:kproma,:,:) - pxtte(1:kproma,:,:)
+
          !-->hhalonen
          !Convective case for wet deposition
-         !lstrat = .FALSE.
-         !CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
-         !    zdpg,   pmratepr, pmrateps,   pmsnowacl,         &
-         !    ZQLWP,  pmiwc,                                   &
-         !    zrwet,  zrdry,                                   &
-         !    reffi,  reffl,                                   &
-         !    znact, zfracn,                                   &
-         !    pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
-         !    pfrain, pfsnow, pfevapr, pfsubls,                &
-         !    zdum2d, zdum3d,                                  &
-         !    paclc,  pclcpre, zrhoa, zdummy, znacttot)
+         lstrat = .FALSE.
+         pclcpre_conv(1:kproma,:) = 0.0_dp
+         pmratepr_conv(1:kproma,:) = 0.002_dp
+         pmrateps_conv(1:kproma,:) = 0.0002_dp
+         pfevapr_conv(1:kproma,:) = 8.0E-8_dp
+         pfsubls_conv(1:kproma,:) = 4.0E-5_dp
+         zdum2d_conv(1:kproma,:) = 0.1_dp
+         pfrain_conv(1:kproma,:) = 0.0004_dp
+         pfsnow_conv(1:kproma,:) = 0.0001_dp
+
+         ! initialize mixing ratios for wet deposition
+         ! -- initialise in-cloud and interstitial mixing ratios
+         ! set both equal to tracer mixing ratio as starting point
+         ! ham_wet_chemistry will re-compute these values if lham=true
+         DO jt = 1,ntrac
+            zxtp1(1:kproma,:,jt)  = pxtm1(1:kproma,:,jt) + &
+                  pxtte(1:kproma,:,jt) * time_step_len
+            zxtp1c(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
+            zxtp10(1:kproma,:,jt) = zxtp1(1:kproma,:,jt)
+         END DO
+
+         pxtte_in = pxtte
+
+         CALL wetdep_interface(kproma, kbdim, klev, ktop, krow, lstrat, &
+             zdpg,   pmratepr_conv, pmrateps_conv,   pmsnowacl,         &
+             pmlwc,  pmiwc,                                   &
+             zrwet,  zrdry,                                   &
+             reffi,  reffl,                                   &
+             znact, zfracn,                                   &
+             pt, pxtm1, zlfrac_so2, pxtte, zxtp10, zxtp1c,    &
+             pfrain_conv, pfsnow_conv, pfevapr_conv, pfsubls_conv,                &
+             zdum2d_conv, zdum3d,                                  &
+             paclc,  pclcpre_conv, zrhoa, zdummy, znacttot)
+
+         pxtte_wetdepconv(1:kproma,:,:) = pxtte_in(1:kproma,:,:) - pxtte(1:kproma,:,:)
          !<--hhalonen
          
       END IF
@@ -916,7 +965,7 @@ PROGRAM driver
       !--> variables for dry deposition
       DO JL = 1,kproma
          DO JK = 1,klev
-         ZDP(JL,JK) = paph(JL,JK) - paph(JL,JK-1)
+         ZDP(JL,JK) = paph(JL,JK+1) - paph(JL,JK)
          END DO
          IF ( PLSM(JL) < 0.99_JPRB ) THEN
          ZLOLAND(JL) = .FALSE.
@@ -947,6 +996,8 @@ PROGRAM driver
       ZXTMD1(1:kproma,1:klev,:)  = pxtm1(1:kproma,1:klev,:) + (ZTENCIH(1:kproma,1:klev,:) * time_step_len) ! update mixrat with tendency
       ZVDEP(1:kproma,:)          = 0._JPRB                  ! ddep velocity as zero
 
+      pxtte_in = pxtte
+
       ! RCHG: Recommendation, those subroutines specific of m7 should have 
       !       m7 in the name not sure if this is specific or general/common 
       !       but adapted to m7. Like m7_simple_sulfur_drydep below. 
@@ -969,6 +1020,10 @@ PROGRAM driver
          pxtte(JL,klev,JT) = ZTENCIH(JL,klev,JT) + ((ZXTEMS(JL,JT)*RG)/(zdp(JL,klev)))
          END DO
       END DO
+
+      pxtte_drydep(1:kproma,:,:) = pxtte_in(1:kproma,:,:) - pxtte(1:kproma,:,:)
+
+      pxtte_in = pxtte
       !<--hhalonen
       
       !-->eehol
@@ -976,7 +1031,8 @@ PROGRAM driver
          
           CALL sedi_interface(kbdim, kproma, klev, krow,   &
              pt,    pqm1,     pap,  paph, zrwet, zrhop, &
-             pxtm1, pxtte, ZSEDIFLUX               )
+             pxtm1, pxtte)
+      pxtte_sedi(1:kproma,:,:) = pxtte_in(1:kproma,:,:) - pxtte(1:kproma,:,:)
 
       END IF
       !<--eehol: updating pxtm1 according to pxtte and time step and nullify pxtte
@@ -990,16 +1046,21 @@ PROGRAM driver
       !-->eehol
 
       !-->hhalonen: For test plotting
+      do i = 1, ntrac
+         zwetdepstratflux_series(ii,i) = pxtte_wetdepstrat(1,1,i)
+      end do
+      do i = 1, ntrac
+         zwetdepconvflux_series(ii,i) = pxtte_wetdepconv(1,1,i)
+      end do
+      do i = 1, ntrac
+         zdrydepflux_series(ii, i) = pxtte_drydep(1,1,i)
+      end do
+      do i = 1, ntrac
+         zsediflux_series(ii, i) = pxtte_sedi(1,1,i)
+      end do
       do i = 1, nclass
          zaernl_series(ii, i) = zaernl(1,1,i)
       end do
-      do i = 1, ntrac
-         zdrydepflux_series(ii, i) = ZDDEPFLUX(1,i)
-      end do
-      do i = 1, ntrac
-         zsediflux_series(ii, i) = ZSEDIFLUX(1,i)
-      end do
-      zwetdepflux_series(ii,1) = zdum2d(1,1)
       !<--hhalonen
 
       !<--eehol: write number concentration to output data file
@@ -1018,29 +1079,39 @@ PROGRAM driver
 
    !-->hhalonen
    ! Test plotting
+   open(unit=13, file='zpxtte_wetdepstrat.dat', status='unknown')
+   do ii = 1, 1000
+      !write(13,*) (zwetdepflux_series(ii,i), i = 1, ntrac)
+      write(13,*) (zwetdepstratflux_series(ii,i), i = 22, 28)
+   end do
+   close(13)
+
+   open(unit=13, file='zpxtte_wetdepconv.dat', status='unknown')
+   do ii = 1, 1000
+      !write(13,*) (zwetdepflux_series(ii,i), i = 1, ntrac)
+      write(13,*) (zwetdepconvflux_series(ii,i), i = 22, 28)
+   end do
+   close(13)
+
+   open(unit=11, file='zpxtte_drydep.dat', status='unknown')
+   do ii = 1, 1000
+      !write(11,*) (zdrydepflux_series(ii, i), i = 1, ntrac)
+      write(11,*) (zdrydepflux_series(ii, i), i = 22, 28)
+   end do
+   close(11)
+
+   open(unit=12, file='zpxtte_sedi.dat', status='unknown')
+   do ii = 1, 1000
+      !write(12,*) (zsediflux_series(ii, i), i = 1, ntrac)
+      write(12,*) (zsediflux_series(ii, i), i = 22, 28)
+   end do
+   close(12)
+
    open(unit=10, file='zaernl_series.dat', status='unknown')
    do ii = 1, 1000
       write(10,*) (zaernl_series(ii, i), i = 1, nclass)
    end do
    close(10)
-
-   open(unit=11, file='zdrydepflux_series.dat', status='unknown')
-   do ii = 1, 1000
-      write(11,*) (zdrydepflux_series(ii, i), i = 1, ntrac)
-   end do
-   close(11)
-
-   open(unit=12, file='zsediflux_series.dat', status='unknown')
-   do ii = 1, 1000
-      write(12,*) (zsediflux_series(ii, i), i = 1, ntrac)
-   end do
-   close(12)
-
-   open(unit=13, file='zwetdepflux_series.dat', status='unknown')
-   do ii = 1, 1000
-      write(13,*) (zwetdepflux_series(ii,1))
-   end do
-   close(13)
    !<--hhalonen
 
   !-----------------------------------------------------------------------------------

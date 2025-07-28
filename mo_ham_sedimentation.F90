@@ -135,13 +135,11 @@ MODULE mo_ham_sedimentation
                             pdpg(kbdim, klev),    &       ! layer thickness (pressure)
                             pdz(kbdim, klev),     &       ! layer thickness (length)
                             pxtp1(kbdim, klev)            ! updated tracer(kt) concentration
-  REAL(dp) ::  psediflux(kbdim, klev)        ! sedimentation flux
-  
 
   REAL(dp), INTENT(in)   :: prwetm7(kbdim,klev,nclass), pdensaerm7(kbdim,klev,nclass)
   REAL(dp), INTENT(inout):: pxtte(kbdim, klev)            ! tracer(kt) tendency
-  REAL(dp), INTENT(out)  :: pvsedi(kbdim, klev)!,  &       ! sedimentation velocity
-                            !psediflux(kbdim, klev)        ! sedimentation flux
+  REAL(dp), INTENT(out)  :: pvsedi(kbdim, klev),  &       ! sedimentation velocity
+                            psediflux(kbdim, klev)        ! sedimentation flux
 
 
   !--- local variables
