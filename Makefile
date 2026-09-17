@@ -8,7 +8,7 @@ MOD_FILES = $(F90_SOURCE_FILES:.F90=.o) $(F77_SOURCE_FILES:.f=.o)
 OBJECT_FILES = $(F90_SOURCE_FILES:.F90=.o) $(F77_SOURCE_FILES:.f=.o) $(C_SOURCE_FILES:.c=.o)
 F90 = gfortran
 #F90FLAGS = -cpp -g -O -DNOMPI -D__STANDALONE -D__x86_64 -I./include -I/usr/include/
-F90FLAGS = -cpp -g -fbacktrace -std=legacy -ffpe-trap=invalid,zero,overflow -O -DNOMPI -D__x86_64 -I./include -I/usr/include/
+F90FLAGS = -cpp -g -fbacktrace -std=legacy -ffpe-trap=invalid,zero,overflow -O -DNOMPI -DSALSA -D__x86_64 -I./include -I/usr/include/
 #F90LFLAGS = -cpp -g -O -DNOMPI -D__STANDALONE -D__x86_64 -I./include -I/usr/include/
 LIBS = -lnetcdf -lnetcdff
 
@@ -28,7 +28,7 @@ clean:
 	$(F90) $(F90FLAGS) -c $< -o $@
 
 
-driver.o : driver.F90 mo_ham_rad.o mo_hammoz_drydep.o parkind1.o mo_convert_concentrations.o mo_hammoz_sedimentation.o mo_ham_activ.o mo_read_netcdf77.o mo_hammoz_wetdep.o mo_param_switches.o mo_activ.o mo_ham_subm.o mo_tracdef.o mo_ham_salsa_cloud.o mo_filename.o mo_submodel.o mo_math_constants.o mo_physical_constants.o mo_time_control.o mo_kind.o mo_ham_subm_species.o mo_ham_salsa_sizedist.o mo_ham_salsactl.o mo_ham_salsa.o mo_ham_init.o mo_ham.o mo_ham_salsa_init.o driver_input.o 
+driver.o : driver.F90 mo_ham_m7_trac.o mo_species.o TM5M7_OPTICS_DATA.o mo_ham_rad.o mo_hammoz_drydep.o parkind1.o mo_convert_concentrations.o mo_hammoz_sedimentation.o mo_ham_activ.o mo_read_netcdf77.o mo_hammoz_wetdep.o mo_param_switches.o mo_activ.o mo_ham_subm.o mo_tracdef.o mo_ham_salsa_cloud.o mo_filename.o mo_submodel.o mo_math_constants.o mo_physical_constants.o mo_time_control.o mo_kind.o mo_ham_subm_species.o mo_ham_salsa_sizedist.o mo_ham_salsactl.o mo_ham_salsa.o mo_ham_init.o mo_ham.o mo_ham_salsa_init.o driver_input.o 
 driver_input.o : driver_input.F90 mo_kind.o 
 driver_tracer.o : driver_tracer.F90 mo_ham_salsactl.o mo_ham.o mo_species.o mo_physical_constants.o mo_tracdef.o mo_kind.o 
 mo_activ.o : mo_activ.F90 mo_ham.o mo_control.o mo_math_constants.o mo_param_switches.o mo_physical_constants.o mo_kind.o 
@@ -51,7 +51,7 @@ mo_hammoz_drydep.o : mo_hammoz_drydep.F90 mo_ham_drydep.o mo_submodel.o mo_tracd
 mo_hammoz_sedimentation.o : mo_hammoz_sedimentation.F90 mo_ham.o mo_ham_sedimentation.o mo_time_control.o mo_tracdef.o mo_kind.o 
 mo_hammoz_wetdep.o : mo_hammoz_wetdep.F90 mo_submodel.o mo_ham_wetdep.o mo_species.o mo_tracdef.o mo_physical_constants.o mo_time_control.o mo_ham.o mo_kind.o 
 mo_ham_rad_data.o : mo_ham_rad_data.F90 mo_ham.o mo_kind.o 
-mo_ham_rad.o : mo_ham_rad.F90 mo_read_netcdf77.o TM5M7_OPTICS_DATA.o TM5M7_DATA.o MPL_MODULE.o YOMMP0.o mo_control.o mo_ham_salsactl.o mo_ham_salsa.o mo_tracdef.o mo_exception.o mo_physical_constants.o mo_math_constants.o mo_ham_m7ctl.o mo_ham_species.o mo_species.o mo_kind.o mo_ham.o mo_ham_rad_data.o 
+mo_ham_rad.o : mo_ham_rad.F90 mo_read_netcdf77.o TM5M7_DATA.o MPL_MODULE.o YOMMP0.o mo_control.o mo_ham_salsactl.o parkind1.o TM5M7_OPTICS_DATA.o mo_tracdef.o mo_exception.o mo_physical_constants.o mo_math_constants.o mo_ham_m7ctl.o mo_ham_species.o mo_species.o mo_kind.o mo_ham.o mo_ham_rad_data.o 
 mo_ham_salsa_cloud.o : mo_ham_salsa_cloud.F90 mo_param_switches.o mo_tracdef.o mo_math_constants.o mo_physical_constants.o mo_activ.o mo_ham_salsactl.o mo_ham_species.o mo_species.o mo_ham.o mo_kind.o 
 mo_ham_salsactl.o : mo_ham_salsactl.F90 mo_submodel.o mo_util_string.o mo_exception.o mo_species.o mo_kind.o 
 mo_ham_salsa_dynamics.o : mo_ham_salsa_dynamics.F90 mo_ham_subm_species.o mo_time_control.o mo_ham_salsa_nucleation.o mo_ham_species.o mo_species.o mo_ham.o mo_physical_constants.o mo_math_constants.o mo_kind.o mo_ham_salsa_init.o mo_ham_salsactl.o 
@@ -90,6 +90,7 @@ MPL_MODULE.o : MPL_MODULE.F90 mo_kind.o
 oifs_to_ham.o : oifs_to_ham.F90 mo_ham.o 
 parkind1.o : parkind1.F90 
 TM5M7_DATA.o : TM5M7_DATA.F90 
+TM5M7_INIT.o : TM5M7_INIT.F90 parkind1.o TM5M7_OPTICS_DATA.o 
 TM5M7_OPTICS_DATA.o : TM5M7_OPTICS_DATA.F90 parkind1.o 
 yomm7ctl.o : yomm7ctl.F90 parkind1.o 
 YOMMP0.o : YOMMP0.F90 

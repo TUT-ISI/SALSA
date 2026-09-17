@@ -354,7 +354,7 @@ CONTAINS
 
              !-- part 1, eq (11)
              zalpha = grav*(speclist(id_wat)%moleweight/1000.)*zevap/(cpd*argas*ptm1(ii,jj)**2)-&
-                  grav*(amd*1.e3)/(argas*ptm1(ii,jj))
+                  grav*(amd*1.e-3)/(argas*ptm1(ii,jj))
 
              !-- part 1, eq (12)
              zgamma = argas*ptm1(ii,jj)/(zps*(speclist(id_wat)%moleweight/1000.)) &

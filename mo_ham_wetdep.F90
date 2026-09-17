@@ -526,9 +526,6 @@ MODULE mo_ham_wetdep
 
   ENDIF
 
-  WRITE(*,*) 'modename: ', trlist%ti(kt)%fullname
-  WRITE(*,*) 'zxtte in wetdep =', zxtte
-
   pxtte(1:kproma,:,kt) = pxtte(1:kproma,:,kt) + zxtte(1:kproma,:)
   
   END SUBROUTINE ham_wetdep

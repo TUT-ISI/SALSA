@@ -148,7 +148,7 @@ MODULE mo_ham
 
   !--- 1.0) Logical:
 
-  INTEGER :: nham_subm = 2             ! Switch for aerosol microphysics scheme:
+  INTEGER :: nham_subm = 3             ! Switch for aerosol microphysics scheme:
                                        !
                                        ! nham_subm = 1  Bulk scheme
                                        !           = 2  Modal scheme (M7) (default)

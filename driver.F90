@@ -295,10 +295,12 @@ PROGRAM driver
   REAL(dp)        :: zaer_tau_diag(kbdim,klev,kb_diag)
   REAL(dp)        :: zaer_ssa_diag(kbdim,klev,kb_diag)
   REAL(dp)        :: zaer_asym_diag(kbdim,klev,kb_diag)
+  REAL(dp)        :: zfacn
   CHARACTER(LEN=64) :: cfile2
   INTEGER         :: kpband
   LOGICAL         :: ldiag_aeropt
   INTEGER         :: ntype_diaf
+  INTEGER         :: jn
 
   ! For test plotting
   character(len=*), parameter :: datfile = "zaerml.dat"
@@ -310,7 +312,7 @@ PROGRAM driver
   real, ALLOCATABLE :: zwetdepconvflux_series(:,:)
   character(len=100) :: filename
   character(len=10)  :: istr
-  integer :: lu
+  integer :: lu, ifrac, inact, irdry, inum
   !<--hhalonen
  
 !>>>>
@@ -627,38 +629,11 @@ PROGRAM driver
         END DO
      END DO
 
-     !<--eehol: Opening the output data file for size distribution output
-     OPEN(15,FILE='data/num_m7.dat',STATUS='unknown')
-     
-     ! writing out initial size distribution
-     WRITE(15,'(17(A3," "))') column_header_m7
-     WRITE(15,665)            zaernl(1,1,1:nclass)
-
-     !<-- Additional step: Open file for dry radius output for HAM_M7
-     OPEN(16,FILE='data/radius_m7.dat',STATUS='unknown')
-
-     ! writing out dry radii
-     WRITE(16,'(17(A3," "))') column_header_m7
-     WRITE(16,665)            zrdry(1,1,1:nclass)
-
   CASE(HAM_SALSA)
      !<--eehol: calculating the initial size distribution (zaernl)
      core(in1a:fn2b) = pi_6 * dpmid(in1a:fn2b)**3
      CALL size_distribution(kproma, kbdim,  klev,   &
           n, dpg, sigmag, zaernl)
-     !<--eehol: Opening the output data file for size distribution output
-     OPEN(15,FILE='data/num.dat',STATUS='unknown')
-     
-     ! writing out initial size distribution
-     WRITE(15,'(17(A3," "))') column_header
-     WRITE(15,665)            zaernl(1,1,in1a:fn2b)
-
-     !<-- Additional step: Open file for dry radius output for HAM_SALSA
-     OPEN(16,FILE='data/radius.dat',STATUS='unknown')
-
-     ! writing out dry radii
-     WRITE(16,'(17(A3," "))') column_header
-     WRITE(16,665)            zrdry(1,1,in1a:fn2b)
 
   END SELECT
   !-->eehol
@@ -737,9 +712,33 @@ PROGRAM driver
    zaer_asym_diag(1:kproma,:,:) = 0.0_JPRB  ! Can be 0 in input
    lambda_diag(:)               = 550.E-9_JPRB
    !<--hhalonen
+   !--- Factor to transform N/m**3 into N/cm**3:
+   zfacn  = 1.0e-06_dp
 
    !-----------------------------------------------------------------------------------
+  ! open and initialize some output files
+  inum = find_next_free_unit(20,99)
+  OPEN(inum, FILE='data/num.dat', STATUS='unknown')
+  CALL write_header(inum)
 
+  irdry = find_next_free_unit(20,99)
+  OPEN(irdry, FILE='data/rdry.dat', STATUS='unknown')
+  CALL write_header(irdry)
+
+  inact = find_next_free_unit(20,99)
+  OPEN(inact, FILE='data/nact.dat', STATUS='unknown')
+  CALL write_header(inact)
+  
+  ifrac = find_next_free_unit(20,99)
+  OPEN(ifrac, FILE='data/fracn.dat', STATUS='unknown')
+  CALL write_header(ifrac)
+
+  ! writing out initial size distribution
+  CALL write_row(irdry, dpmid(in1a:fn2b)/2._dp)  ! all zero at this time
+  CALL write_row(inum, zaernl(1,1,in1a:fn2b))
+  CALL write_row(ifrac, zfracn(1,1,in1a:fn2b))
+  CALL write_row(inact, znact(1,1,in1a:fn2b))
+  write(6,*) dpmid(in1a:fn2b)/2._dp
    ! Time loop
    DO ii = 1, 1000
 
@@ -761,7 +760,7 @@ PROGRAM driver
 
       ! Gas phase concentrations converted from m-3 to cm-3 for compatibility with M7
       zgas(1:kproma,:,:) = zgas(1:kproma,:,:) * 1.e-6_dp
-
+      
       ! Convert gas concentration to mixing ratio
       CALL gas2mmr(kproma, kbdim, klev, ntrac, &
             pxtm1, zgas, zrhoa, pap, pt)
@@ -776,7 +775,13 @@ PROGRAM driver
           pxtm1, pxtte,                                       &  ! tracer mass/number mr, tendencies
           zrwet, zm6dry, zrhop, zww,                          &  ! mean mode actual radius [m], dry radius for soluble modes [m] 
           paclc, pgrvolm1, zpbl)                                 ! cloud cover, grid box volume, boundary layer top level
-      
+      DO jn=1, nclass
+         jt = sizeclass(jn)%idt_no
+         zaernl(1:kproma,:,jn) = zfacn*zrhoa(1:kproma,:)*(pxtm1(1:kproma,:,jt)+pxtte(1:kproma,:,jt)*time_step_len)
+         !zout3(kidia:kproma,1:klev,jn) = zaernl(1:kproma,1:klev,jn)
+         !     write(3334,*)jt,'NUM',sizeclass(jn)%shortname,jn
+         
+      END DO
       !-->alaak call cloud activation
 
       !-->hhalonen:
@@ -825,6 +830,11 @@ PROGRAM driver
          ! for now we decided to not use diagnostics routines
          ! in order to cut down on output
 
+         !-->hhalonen
+         ! Getting parameters A and B of the Koehler eq.
+         CALL ham_activ_koehler_ab(kproma, kbdim, klev, krow, ktdia, &
+                                  pxtm1, pt, za, zb)
+         !<--hhalonen
          !CALL radii(kproma, kbdim, klev, krow, zrdry)
 
          CALL salsa_abdul_razzak_ghan(&
@@ -835,12 +845,15 @@ PROGRAM driver
                znact,    zfracn,zsc,   zrc, &
                zsmax  )
          ! ECHAM indices
-         ! n of act p (o), saturation water vapour pressure (i1),  air density (i1)
+         ! n of act p (o), saturation water vapour press  ! writing out initial size distribution
+         CALL write_row(irdry, zrdry(1,1,in1a:fn2b))  ! all zero at this time
+         CALL write_row(inum, zaernl(1,1,in1a:fn2b))
+         CALL write_row(ifrac, zfracn(1,1,in1a:fn2b))
+         CALL write_row(inact, znact(1,1,in1a:fn2b))
          ! tracer mixing ratios at t-d (i1), temperature(i1),pressure(i1), specific humidity(i1)
          ! mean or bins of updraft velocity (i1), pdf of updraft velocity (i1)
          ! number of activated p per mode (o), fraction of act. p (o), critical supersat. (o) critical r of act per mode(o)
          ! maximum supersaturation (o)
-         
          
          ! pesw calculated by sat_spec_hum module in ECHAM (uses lookuptables)
          ! zw and zwpdf calculated by activ_updraft module  
@@ -1120,6 +1133,33 @@ PROGRAM driver
   ! <-- mirfan: fixing output issues for very small numbers  
 665 FORMAT(99(E14.4E5,1X))
   ! --> mirfan
-  !-->eehol
-  
+   !-->eehol
+ CONTAINS
+   
+   SUBROUTINE write_header(filenum)
+     ! Write a comma-separated column header for easier 
+     ! readability into the given output file
+     ! hard-coded for 17-bin SALSA
+     INTEGER, INTENT(IN) :: filenum
+     CHARACTER (len=3), DIMENSION(17) :: column_header = [ &
+          '1a1', '1a2', '1a3', &
+          '2a1', '2a2', '2a3', '2a4', '2a5', '2a6', '2a7', &
+          '2b1', '2b2', '2b3', '2b4', '2b5', '2b6', '2b7'  &
+    ]
+     
+     WRITE(filenum,'(16(A3,", "),A3)') column_header
+   END SUBROUTINE write_header
+   
+   
+   SUBROUTINE write_row(filenum, row)
+     ! Write the next row of data comma-separated into the
+    ! given output file
+     ! hard-coded for 17-bin SALSA
+     INTEGER,  INTENT(IN) :: filenum
+     REAL(dp), INTENT(IN), DIMENSION(17) :: row
+     CHARACTER(LEN=32) :: fmt = "(16(E14.4E5,','),E14.4E5)"
+     
+     WRITE(filenum,fmt) row
+   END SUBROUTINE write_row
+   
 END PROGRAM driver

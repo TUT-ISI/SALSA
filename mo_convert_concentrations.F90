@@ -208,7 +208,6 @@ CONTAINS
        jt    = aerocomp(jn)%idt       ! get tracer id
        jspec = aerocomp(jn)%spid      ! get species id
        jl    = subm_aero_idx(jspec)     ! get index to subm_aerospec list
-       write(6,*) subm_aero_idx(jspec), aerocomp(jn)%species%shortname
        !!mgs=old code!!     IF (aerocomp(jn)%species%m7unitconv == immr2molec) THEN
        IF (jl <= 0) THEN
           WRITE(message_text,*) 'SUBM_AERO_IDX Mapping error !! No index for jspec=',jspec

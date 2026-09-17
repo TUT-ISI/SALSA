@@ -915,7 +915,7 @@ CONTAINS
     USE mo_ham_streams,   ONLY: rwet
 #endif
 #ifdef SALSA
-    USE mo_ham_salsa,     ONLY: rwet_salsa
+!    USE mo_ham_salsa,     ONLY: rwet_salsa
     USE mo_ham_salsactl,  ONLY: fn2a, fn2b, nbin3
 #endif
     USE mo_control,       ONLY: ltimer
@@ -1094,7 +1094,6 @@ CONTAINS
                 CASE(HAM_SALSA)
 
 #ifdef SALSA
-                   zxx(1:kproma,:) = 2._dp*pi*rwet_salsa(1:kproma,:,jclass)/lambda(jwv)
 
                    IF(jclass < 6 .OR. (jclass > fn2a .AND. jclass < fn2b-(nbin3-1))) THEN
                       itable=1                      
@@ -1270,7 +1269,6 @@ CONTAINS
 
                 CASE(HAM_SALSA)
 #ifdef SALSA
-                   zxx(1:kproma,:)=2._dp*pi*rwet_salsa(1:kproma,:,krow)/lambda(jlwv)
 
                    IF(jclass < 6 .OR. (jclass > fn2a .AND. jclass < fn2b-(nbin3-1))) THEN
                       itable=3
@@ -1408,7 +1406,6 @@ CONTAINS
                 CASE(HAM_SALSA)
 
 #ifdef SALSA
-                   zxx(1:kproma,:) = 2._dp*pi*rwet_salsa(1:kproma,:,jclass)/lambda(jwv)
 
                    IF(jclass < 6 .OR. (jclass > fn2a .AND. jclass < fn2b-(nbin3-1))) THEN
                       itable=1                      
