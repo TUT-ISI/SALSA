@@ -69,9 +69,9 @@ MODULE mo_ham_species
                      id_o3,                   & ! Ozone
                      id_no2,                  & ! Nitrogen dioxide
 !gf see #146
-                     id_no3!,                  & ! Nitrate radical
+                     id_no3,                  & ! Nitrate radical
 !gf
-                     !id_ocnv                   ! Organic carbon (gas) !eehol: leave this out
+                     id_ocnv                   ! Organic carbon (gas) 
 
   !   basic HAM model, aerosol phase compounds
   INTEGER, PUBLIC :: id_so4,                  & ! Sulphate (aerosol)
@@ -308,32 +308,31 @@ MODULE mo_ham_species
                       lburden      = .TRUE.,             &
                       idx          = id_so4              )
 !<<DT
-     !eehol: leave gas phase out for OC
-     ! IF(nham_subm == HAM_SALSA) THEN
+      IF(nham_subm == HAM_SALSA) THEN
 
-     !    !--------- 10a. Organic Carbon (Primary organic aerosol)
-     !    !
+         !--------- 10a. Organic Carbon (Primary organic aerosol)
+         !
         
-     !    CALL new_species(nphase       = GAS_OR_AEROSOL,      &
-     !                     longname     = 'Organic carbon',    &
-     !                     shortname    = 'OC',                &
-     !                     units        = 'kg kg-1',           &
-     !                     mw           = 180._dp,             &
-     !                     tsubmname   = 'HAM',                &
-     !                     itrtype      = itrprog,             &
-     !                     density      = 2000._dp,            &
-     !                     iaerorad     = iradoc,              &
-     !                     lwatsol      = .TRUE.,              &  
-     !                     kappa        = 0.06_dp,             &
-     !                     ldrydep      = .TRUE.,              &
-     !                     lwetdep      = .TRUE.,              &   
-     !                     henry       = (/1.E5_dp, 0._dp/),   &
-     !                     idx          = id_ocnv                   )
 
-     !    ! equate "aerosol" species id with "gas" species id for OCNV
-     !    id_oc = id_ocnv
+        CALL new_species(nphase       = GAS_OR_AEROSOL,      &
+                         longname     = 'Organic carbon',    &
+                         shortname    = 'OC',                &
+                         units        = 'kg kg-1',           &
+                         mw           = 180._dp,             &
+                         tsubmname   = 'HAM',                &
+                         itrtype      = itrprog,             &
+                         density      = 2000._dp,            &
+                         iaerorad     = iradoc,              &
+                         lwatsol      = .TRUE.,              &  
+                         kappa        = 0.06_dp,             &
+                         ldrydep      = .TRUE.,              &
+                         lwetdep      = .TRUE.,              &   
+                         henry       = (/1.E5_dp, 0._dp/),   &
+                         idx          = id_ocnv                   )
+         ! equate "aerosol" species id with "gas" species id for OCNV
+         id_oc = id_ocnv
         
-     ! END IF
+      END IF
 
      !--------- 9. Black Carbon
      !
@@ -352,7 +351,7 @@ MODULE mo_ham_species
                       lwetdep      = .TRUE.,              &   
                       idx          = id_bc                   )
 
-     !IF(nham_subm == HAM_M7) THEN !eehol: OC only in aerosol phase
+     IF(nham_subm == HAM_M7) THEN
 
         !--------- 10b. Organic Carbon (Primary organic aerosol)
         !
@@ -372,7 +371,7 @@ MODULE mo_ham_species
                          lwetdep      = .TRUE.,              &   
                          idx          = id_oc                   )
         
-     !END IF
+     END IF
 
      !--------- 11. Sea salt
      !

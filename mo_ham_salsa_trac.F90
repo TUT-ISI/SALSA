@@ -64,7 +64,7 @@ MODULE mo_ham_salsa_trac
        INSOLUBLE, &
        itrprog, itrdiag, itrpresc
   USE mo_species,       ONLY: speclist
-  USE mo_ham_species,   ONLY: id_dms, id_so2, id_so4g, id_oh, id_h2o2, id_o3, & !,id_ocnv !eehol: leave id_ocnv out
+  USE mo_ham_species,   ONLY: id_dms, id_so2, id_so4g, id_oh, id_h2o2, id_o3,id_ocnv, &
                               id_no2, id_so4, id_bc, id_oc, id_ss, id_du, id_wat
   USE mo_ham_salsactl,  ONLY: in1a, fn1a,           &
                               in2a, fn2a,           &
@@ -74,7 +74,7 @@ MODULE mo_ham_salsa_trac
 
   !--- Public entities:
 
-  PUBLIC :: idt_dms,   idt_so2,   idt_so4,   &!idt_ocnv,     & !eehol: leave idt_ocnv out
+  PUBLIC :: idt_dms,   idt_so2,   idt_so4,   idt_ocnv,     & 
             idt_cdnc_ham,  idt_icnc_ham,                   &
             !idt_mwans, idt_mwaks, idt_mwaas, idt_mwacs     &
         idt_ms4,   idt_moc,   idt_mbc,   idt_mss,      & ! SALSA indices
@@ -97,7 +97,7 @@ MODULE mo_ham_salsa_trac
   INTEGER :: idt_dms    ! mass mixing ratio dms
   INTEGER :: idt_so2    ! mass mixing ratio so2
   INTEGER :: idt_so4    ! mass mixing ratio so4
-  !INTEGER :: idt_ocnv   ! mass mixing ratio nonvolatile organic !eehol: leave idt_ocnv out
+  INTEGER :: idt_ocnv   ! mass mixing ratio nonvolatile organic
 
   INTEGER :: idt_cdnc_ham   ! cloud droplet number concentration
   INTEGER :: idt_icnc_ham   ! ice   cristal number concentration
