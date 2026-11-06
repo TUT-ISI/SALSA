@@ -951,7 +951,7 @@ CONTAINS
              pk_ocnv(ii,jj) = 0._dp
              !--
 
-             IF (pn_crit_sa(ii,jj) < 4._dp) THEN
+             IF (zntot < 4._dp) THEN ! validity limit of the fit: at least 4 molecules in the cluster
                 !set nucleation rate to collision rate
 
                 !volumes of the colliding objects
@@ -978,8 +978,10 @@ CONTAINS
                 zv1 = zm1/avo/zroo
                 zv2 = zv1
 
-                zcoll =   zpcsa*zpcsa* &
-                     (3._dp*pi/4._dp)**(1._dp/6._dp) * &
+                ! dimers from collisions of identical molecules: 0.5*K*C**2, with the free-molecular
+                ! kernel K = (3/(4*pi))**(1/6)*sqrt(6kT/m1+6kT/m2)*(v1**(1/3)+v2**(1/3))**2
+                zcoll =   0.5_dp*zpcsa*zpcsa* &
+                     (3._dp/(4._dp*pi))**(1._dp/6._dp) * &
                      SQRT(6._dp*argas*zt/zm1+6._dp*argas*zt/zm2) * &
                      (zv1**(1._dp/3._dp) + zv2**(1._dp/3._dp))**2. * &
                      1.e+6_dp        ! m3 -> cm3      
