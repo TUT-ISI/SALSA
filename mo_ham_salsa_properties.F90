@@ -271,10 +271,10 @@ CONTAINS
          zlwc,       &   ! liquid water content [kg/m3-air]
          zdold,      &   !
          zrh,        &   ! 
-         zmvsu           ! molar volume
+         zmvw            ! volume of one water molecule [m3]
 
 
-    zmvsu = (speclist(id_so4)%moleweight/1000.)/avo/speclist(id_so4)%density
+    zmvw = (speclist(id_so4)%moleweight/1000.)/avo/speclist(id_so4)%density
 
     !----------------------------------------------------------------------
     !-- 1) Regime 1: sulphate and partly water-soluble OC -----------------
@@ -336,7 +336,7 @@ CONTAINS
                            pcore(ii,jj,kk)/(pi/6.0))**(1._dp/3._dp)
                       
                       !-- Kelvin effect 
-                      zke = exp(2._dp*surfw0*zmvsu/(ak*ptemp(ii,jj)*pdwet(ii,jj,kk)))
+                      zke = exp(2._dp*surfw0*zmvw/(ak*ptemp(ii,jj)*pdwet(ii,jj,kk)))
                       
                    END DO
                 ELSE !eehol: if not soluble then dwet = ddry
