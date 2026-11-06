@@ -128,7 +128,9 @@ CONTAINS
     !-- Local variables ------------------------
     INTEGER ::                      &
          ii, jj, kk, ll, mm, nn,    & ! loop indices 
-         index_2a, index_2b           ! corresponding bin in regime 2a/2b
+         index_2a, index_2b         &  ! corresponding bin in regime 2a/2b
+         jk,                        & ! position in the update order
+         korder(fn2b)                 ! update order of the bins
 
     REAL(dp) ::                     &
          zntemp(kbdim,klev),        & ! variable for saving pnaero(fn2b) temporarily
@@ -161,6 +163,17 @@ CONTAINS
     !-- particle mass; density of 1500 kg/m3 assumed [kg] 
     zmpart = pi/6.0*dpmid(1:fn2b)**3*1500.
 
+    !-- Update order: regime 1, then each 2b bin before the 2a bin of the same size.
+    !   Gains use the new volume of the smaller bin and losses the old number of the
+    !   larger bin; the two cancel only if every bin is updated before the bins that
+    !   gain from it (2a bin k gains from 2b bins up to k, 2b bin k from 2a bins below k).
+    DO kk = in1a, in2a-1
+       korder(kk) = kk
+    END DO
+    DO kk = 0, fn2a-in2a
+       korder(in2a+2*kk)   = in2b+kk
+       korder(in2a+2*kk+1) = in2a+kk
+    END DO
 
      DO jj = 1,klev      ! vertical grid
         DO ii = 1,kproma ! horizontal kproma in the slab
@@ -197,9 +210,8 @@ CONTAINS
     !-- 3) New particle and volume concentrations after coagulation -------------
 
     ! loops over
-    DO kk = in1a,fn2b      ! bins that we want to update
-       !DO jj = 1,klev      ! vertical grid
-          !DO ii = 1,kproma ! horizontal kproma in the slab
+    DO jk = in1a,fn2b      ! bins that we want to update
+       kk = korder(jk)
 
              !-- 3.1) Bin in regime 1 -----------------------------------
 
