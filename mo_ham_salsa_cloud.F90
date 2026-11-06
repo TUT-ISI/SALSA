@@ -295,9 +295,9 @@ CONTAINS
           zns(:) = 0._dp
 
           IF( & ! are the minimal conditions fulfilled?
-               nw > 1 .OR. pw(ii,jj,1) > zeps .AND. &
-               pqm1(ii,jj)>zeps               .AND. &
-               ptm1(ii,jj)>(tmelt-35.0_dp)          & !eehol: temp greater than homogenic ice nucleation temperature
+               (nw > 1 .OR. pw(ii,jj,1) > zeps) .AND. &
+               pqm1(ii,jj)>zeps                 .AND. &
+               ptm1(ii,jj)>(tmelt-35.0_dp)            & !eehol: temp greater than homogenic ice nucleation temperature
                ) THEN  
 
 !! --> thk: repetition:           
@@ -358,7 +358,7 @@ CONTAINS
 
              !-- part 1, eq (12)
              zgamma = argas*ptm1(ii,jj)/(zps*(speclist(id_wat)%moleweight/1000.)) &
-                  + (speclist(id_wat)%moleweight/1000.)*zevap**2/(cpd*papm1(ii,jj)*(amd*1.e3)*ptm1(ii,jj))
+                  + (speclist(id_wat)%moleweight/1000.)*zevap**2/(cpd*papm1(ii,jj)*(amd*1.e-3)*ptm1(ii,jj))
 
              !-- diffusivity [m2/s], Seinfeld and Pandis (15.65)
              !  Eq (17.61) in second edition
