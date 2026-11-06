@@ -126,10 +126,10 @@ CONTAINS
                    !-- particle volume at the high end of the bin
                    zVihi = zVrat * zVilo
    
-                   !-- volume in the grown bin which exceeds 
-                   !   the bin upper limit
-                   zVexc = 1._dp/2._dp*(zVihi + vhilim(kk))
-   
+                   !-- mean volume of the particles above the bin upper limit
+                   !   (all particles if the whole bin has grown past it)
+                   zVexc = 1._dp/2._dp*(zVihi + MAX(zVilo, vhilim(kk)))
+
                    !-- number fraction to be moved to the larger bin
                    znfrac = min(1._dp,(zVihi-vhilim(kk)) / (zVihi - zVilo))
              
@@ -149,7 +149,11 @@ CONTAINS
                    pnaero(ii,jj,mm) = pnaero(ii,jj,mm) + znfrac * pnaero(ii,jj,kk)
    
                    pnaero(ii,jj,kk) = pnaero(ii,jj,kk) * (1._dp - znfrac)
-   
+
+                   !-- the receiving bin may now exceed its upper limit
+                   IF (mm /= fn2a .AND. mm /= fn2b .AND. pnaero(ii,jj,mm) > nlim) THEN
+                      IF (sum(pvols(ii,jj,mm,:))/pnaero(ii,jj,mm) > vhilim(mm)) within_bins = .FALSE.
+                   END IF
    
                 END IF
    
