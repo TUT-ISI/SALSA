@@ -128,7 +128,7 @@ CONTAINS
     !-- Local variables ------------------------
     INTEGER ::                      &
          ii, jj, kk, ll, mm, nn,    & ! loop indices 
-         index_2a, index_2b         &  ! corresponding bin in regime 2a/2b
+         index_2a, index_2b,        & ! corresponding bin in regime 2a/2b
          jk,                        & ! position in the update order
          korder(fn2b)                 ! update order of the bins
 
