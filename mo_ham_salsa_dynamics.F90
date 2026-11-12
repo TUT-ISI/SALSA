@@ -572,6 +572,7 @@ CONTAINS
     ztmst = time_step_len
     zqtmst = 1.0_dp/ztmst
     zxsa = 0._dp
+    zxocnv = 0._dp
     zj3n3 = 0._dp
     
     !------------------------------------------------------------------------------
@@ -685,7 +686,8 @@ CONTAINS
                      ) 
              ENDIF
 #endif          
-          ELSE
+          ELSE IF (isubm_ocnv > 0) THEN ! only if the organic gas is registered
+
           !---- 5.1.1) Non-volatile organic compound: condenses onto all bins 
 
              ! >> thk: VBS

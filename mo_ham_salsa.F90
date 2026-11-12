@@ -264,7 +264,7 @@ CONTAINS
                 pc_gas(ii,jj,isubm_so4g)   = pc_gas(ii,jj,isubm_so4g) + &
                      zvols(ii,jj,kk,1) * speclist(id_so4)%density /     &
                      (speclist(id_so4)%moleweight/1000.) * avo
-                pc_gas(ii,jj,isubm_ocnv)   = pc_gas(ii,jj,isubm_ocnv) + &
+                IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv)   = pc_gas(ii,jj,isubm_ocnv) + &
                      zvols(ii,jj,kk,2) * speclist(id_oc)%density /      &
                      (speclist(id_oc)%moleweight/1000.) * avo
                 pnaero(ii,jj,kk)  = 0.0_dp
@@ -283,7 +283,7 @@ CONTAINS
                 pc_gas(ii,jj,isubm_so4g) = pc_gas(ii,jj,isubm_so4g) + &
                      zvols(ii,jj,kk,1) * speclist(id_so4)%density /   &
                      (speclist(id_so4)%moleweight/1000.) * avo
-                pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
+                IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
                      zvols(ii,jj,kk,2) * speclist(id_oc)%density /    &
                      (speclist(id_oc)%moleweight/1000.) * avo
                 pnaero(ii,jj,kk)  = 0.0_dp
@@ -302,7 +302,7 @@ CONTAINS
                 pc_gas(ii,jj,isubm_so4g) = pc_gas(ii,jj,isubm_so4g) + &
                      zvols(ii,jj,kk,1) * speclist(id_so4)%density /   &
                      (speclist(id_so4)%moleweight/1000.) * avo
-                pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
+                IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
                      zvols(ii,jj,kk,2) * speclist(id_oc)%density /    &
                      (speclist(id_oc)%moleweight/1000.) * avo
                 pnaero(ii,jj,kk)  = 0.0_dp
@@ -359,7 +359,7 @@ CONTAINS
                    pc_gas(ii,jj,isubm_so4g) = pc_gas(ii,jj,isubm_so4g) + &
                         zvols(ii,jj,kk,1) * speclist(id_so4)%density /   &
                         (speclist(id_so4)%moleweight/1000.) * avo
-                   pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
+                   IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
                         zvols(ii,jj,kk,2) * speclist(id_oc)%density /    &
                         (speclist(id_oc)%moleweight/1000.) * avo
                    pnaero(ii,jj,kk)  = 0.0_dp
@@ -378,7 +378,7 @@ CONTAINS
                    pc_gas(ii,jj,isubm_so4g) = pc_gas(ii,jj,isubm_so4g) + &
                         zvols(ii,jj,kk,1) * speclist(id_so4)%density /   &
                         (speclist(id_so4)%moleweight/1000.) * avo
-                   pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
+                   IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
                         zvols(ii,jj,kk,2) * speclist(id_oc)%density /    &
                         (speclist(id_oc)%moleweight/1000.) * avo
                    pnaero(ii,jj,kk)    = 0.0_dp
@@ -397,7 +397,7 @@ CONTAINS
                    pc_gas(ii,jj,isubm_so4g) = pc_gas(ii,jj,isubm_so4g) + &
                         zvols(ii,jj,kk,1) * speclist(id_so4)%density /   &
                         (speclist(id_so4)%moleweight/1000.) * avo
-                   pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
+                   IF (isubm_ocnv > 0) pc_gas(ii,jj,isubm_ocnv) = pc_gas(ii,jj,isubm_ocnv) + &
                         zvols(ii,jj,kk,2) * speclist(id_oc)%density /    &
                         (speclist(id_oc)%moleweight/1000.) * avo
                    pnaero(ii,jj,kk)  = 0.0_dp
