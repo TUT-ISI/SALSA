@@ -292,7 +292,8 @@ CONTAINS
              zbinmol = 0._dp
              zdold = 1._dp
 
-             IF ((pnaero(ii,jj,kk) > nlim)) THEN
+             ! particles without any volume are treated like an empty bin
+             IF (pnaero(ii,jj,kk) > nlim .AND. SUM(pvols(ii,jj,kk,:)) > 0._dp) THEN
 
                 !-- volume of sulphate and OC in one particle [fxm]
 
