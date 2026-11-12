@@ -102,6 +102,13 @@ CONTAINS
                    zvpart = sum(pvols(ii,jj,kk,:))/pnaero(ii,jj,kk)
    
                    IF (vlolim(kk) > zvpart .AND. kk == in1a) CYCLE
+
+                   !-- regime 1 carries only sulphate and OC: undersized particles of the first
+                   !   2a and 2b bins that contain BC, sea salt or dust stay in their bin
+                   !   HK: NOTE!!!!: this needs to be revisited since this also blocks sulfate and
+                   !   organics being transferred to smaller bins 
+                   IF (vlolim(kk) > zvpart .AND. (kk == in2a .OR. kk == in2b) .AND. &
+                       pvols(ii,jj,kk,3) + pvols(ii,jj,kk,4) + pvols(ii,jj,kk,5) > 0._dp) CYCLE
    
                    IF(zvpart < vlolim(kk)) THEN
                       mm = kk - 1
