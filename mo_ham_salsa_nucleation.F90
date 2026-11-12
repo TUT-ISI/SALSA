@@ -584,14 +584,14 @@ CONTAINS
              zgammaF_x = 8._dp*zDc_x/pi/zcv_x    ! [m]
              zgammaF_2 = 8._dp*zDc_2/pi/zcv_2    ! [m]
              
-             zomega_c = ((zRc2+zgammaF_c)**3-(zRc2**2+zgammaF_c)**(3._dp/2._dp))/&
+             zomega_c = ((zRc2+zgammaF_c)**3-(zRc2**2+zgammaF_c**2)**(3._dp/2._dp))/&
                   (3._dp*zRc2*zgammaF_c)-zRc2 ! zomega1, [m]
-             zomega_x = ((zRx2+zgammaF_x)**3-(zRx2**2+zgammaF_x)**(3._dp/2._dp))/&
+             zomega_x = ((zRx2+zgammaF_x)**3-(zRx2**2+zgammaF_x**2)**(3._dp/2._dp))/&
                   (3._dp*zRx2*zgammaF_x)-zRx2 ! zomega1
              
-             zomega_2c = ((zRc2+zgammaF_2)**3-(zRc2**2+zgammaF_2)**(3._dp/2._dp))/&
+             zomega_2c = ((zRc2+zgammaF_2)**3-(zRc2**2+zgammaF_2**2)**(3._dp/2._dp))/&
                   (3._dp*zRc2*zgammaF_2)-zRc2 ! zomega2
-             zomega_2x = ((zRx2+zgammaF_2)**3-(zRx2**2+zgammaF_2)**(3._dp/2._dp))/&
+             zomega_2x = ((zRx2+zgammaF_2)**3-(zRx2**2+zgammaF_2**2)**(3._dp/2._dp))/&
                   (3._dp*zRx2*zgammaF_2)-zRx2 ! zomega2
              
              zsigma_c2 = SQRT(zomega_c**2+zomega_2c**2) ! zigma12, [m]
@@ -625,6 +625,8 @@ CONTAINS
                 
                 ! "effective" coagulation coefficient between freshly-nucleated particles:
                 zKeff = 5.e-16_dp              !cm3/s
+                ! zlambda parameter for "adjusting" the growth rate due to the self coagulation
+                zlambda= 6._dp
                
                 ! use different values at sizes >10 nm:
                 IF (reglim(1) .ge. 10.d-9) THEN
@@ -632,8 +634,6 @@ CONTAINS
                    zKeff= 5.e-17_dp
                 END IF
 
-                ! zlambda parameter for "adjusting" the growth rate due to the self coagulation
-                zlambda= 6._dp  
 
                 ! Initial values for coagulation sink and growth rate
                 zCoagStot = zCoagS_c
@@ -1243,10 +1243,9 @@ CONTAINS
            pn_crit_ocnv(ii,jj) = 0._dp 
            pk_sa(ii,jj) = 1._dp
            pk_ocnv(ii,jj) = 0._dp
+           pd_crit(ii,jj) = 7.9375e-10_dp ! [m], boundary-layer levels only
         END DO
      END DO
-
-     pd_crit(1:kproma,:) = 7.9375e-10_dp ! [m]
 
    END SUBROUTINE kinnucl
 
@@ -1306,10 +1305,9 @@ CONTAINS
            pn_crit_ocnv(ii,jj) = 0._dp 
            pk_sa(ii,jj) = 1._dp
            pk_ocnv(ii,jj) = 0._dp
+           pd_crit(ii,jj) = 7.9375e-10_dp ! [m], boundary-layer levels only
         END DO
      END DO
-
-     pd_crit(1:kproma,:) = 7.9375e-10_dp ! [m]
 
    END SUBROUTINE actnucl
 
