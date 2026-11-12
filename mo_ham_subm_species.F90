@@ -76,7 +76,7 @@ SUBROUTINE map_ham_subm_species
 #endif
   INTEGER         :: jt, jm, jb, jv
 
-  isubm_ocnv = 0._dp
+  isubm_ocnv = 0
   DO jt = 1, nspec
     IF (jt == id_so2)   CALL new_subm_gasspec(id_so2,  immr2molec, isubm_so2)
     IF (jt == id_so4g)  CALL new_subm_gasspec(id_so4g, immr2molec, isubm_so4g)
