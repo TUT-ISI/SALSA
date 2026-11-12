@@ -538,6 +538,8 @@ CONTAINS
          zvisc,                    & ! viscosity of air [kg/(m s)]
          zdfvap,                   & ! air diffusion coefficient [m2/s]
          zmfp,                     & ! mean free path of condensing vapour [m]
+         zmfpair,                  & ! mean free path of air [m]
+         zknair(in1a+1),           & ! Knudsen number of the particles in air
          zcs_tot,                  & ! total condensation sink [1/s]
          zcs_su,                   & ! condensation sink for sulfate [1/s]
          zcs_ocnv,                 & ! condensation sink for nonvolatile organics [1/s]
@@ -621,9 +623,12 @@ CONTAINS
           !  nucleation mode (3 - 20 nm) 
           !
 
-          !-- particle diffusion coefficient [m2/s]
-          zdfpart = ak*ptemp(ii,jj)*zbeta(in1a:in1a+1)/ &    
-                    (3._dp*pi*zvisc*pdwet(ii,jj,in1a:in1a+1))  
+          !-- particle diffusion coefficient [m2/s], with the slip correction for air
+          !   as in coagc (Allen and Raabe, Aerosol Sci. Tech. 4, 269)
+          zmfpair = (1.656e-10_dp*ptemp(ii,jj)+1.828e-8_dp)*p0sl_bg/ppres(ii,jj)
+          zknair  = 2._dp*zmfpair/pdwet(ii,jj,in1a:in1a+1)
+          zdfpart = ak*ptemp(ii,jj)*(1._dp+zknair*(1.142_dp+0.558_dp*exp(-0.999_dp/zknair)))/ &
+                    (3._dp*pi*zvisc*pdwet(ii,jj,in1a:in1a+1))
 
           !-- collision rate [1/s]
           zcolrate(in1a:in1a+1) = 2._dp*pi*(pdwet(ii,jj,in1a:in1a+1)+d_sa)* & 
